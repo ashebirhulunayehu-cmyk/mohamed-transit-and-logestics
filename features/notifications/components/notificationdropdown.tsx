@@ -85,7 +85,7 @@ export default function NotificationDropdown({ onClose }: NotificationDropdownPr
       {/* Footer */}
       <div className="p-3 border-t border-slate-100 bg-slate-50/50">
         <Link
-          href="/assessor/notifications"
+          href="/admin/assessor/notifications"
           onClick={onClose}
           className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
         >

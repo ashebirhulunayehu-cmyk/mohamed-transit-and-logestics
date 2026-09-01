@@ -1,11 +1,14 @@
 import React from 'react';
-import { Search, Filter, SlidersHorizontal } from 'lucide-react';
+import type { ApprovalStatus } from '@/data/assessorMockData';
+import { Search } from 'lucide-react';
+
+type ApprovalFilterStatus = 'All' | ApprovalStatus;
 
 interface ApprovalFiltersProps {
   searchTerm: string;
   onSearchChange: (value: string) => void;
-  statusFilter: string;
-  onStatusFilterChange: (status: string) => void;
+  statusFilter: ApprovalFilterStatus;
+  onStatusFilterChange: React.Dispatch<React.SetStateAction<ApprovalFilterStatus>>;
   counts: {
     all: number;
     pending: number;
@@ -21,11 +24,11 @@ export const ApprovalFilters: React.FC<ApprovalFiltersProps> = ({
   onStatusFilterChange,
   counts,
 }) => {
-  const filterTabs = [
-    { id: 'all', label: 'All Applicants', count: counts.all },
-    { id: 'pending', label: 'Pending Check', count: counts.pending },
-    { id: 'flagged', label: 'Flagged', count: counts.flagged },
-    { id: 'approved', label: 'Approved', count: counts.approved },
+  const filterTabs: { id: ApprovalFilterStatus; label: string; count: number }[] = [
+    { id: 'All', label: 'All Applicants', count: counts.all },
+    { id: 'Pending check', label: 'Pending Check', count: counts.pending },
+    { id: 'Flagged', label: 'Flagged', count: counts.flagged },
+    { id: 'Verified', label: 'Approved', count: counts.approved },
   ];
 
   return (
@@ -48,7 +51,8 @@ export const ApprovalFilters: React.FC<ApprovalFiltersProps> = ({
           const isActive = statusFilter === tab.id;
           return (
             <button
-              key={tab.id}
+              key={tab.label}
+              type="button"
               onClick={() => onStatusFilterChange(tab.id)}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                 isActive

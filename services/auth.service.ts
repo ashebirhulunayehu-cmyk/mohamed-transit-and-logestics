@@ -1,63 +1,59 @@
-// services/auth.service.ts
-import { APIClient } from './api';
+import axiosInstance from "@/modules/utils/axios";
 
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
 
-export interface LoginResponse {
-  token: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    role: 'assessor' | 'importer' | 'admin';
-  };
+export interface LoginCredentials {
+	username: string;
+	password: string;
 }
 
 export interface AuthUser {
-  id: string;
-  name: string;
-  email: string;
-  role: 'assessor' | 'importer' | 'admin';
+	id: string;
+	name: string;
+	email: string;
+	role: 'assessor' | 'importer' | 'admin';
 }
 
 export class AuthService {
-  static async login(credentials: LoginRequest): Promise<LoginResponse> {
-    return APIClient.post<LoginResponse>('/api/auth/login', credentials);
-  }
+	static async login(credentials: LoginCredentials) {
+		const response = await axiosInstance.post('/v1/User/Login', credentials);
 
-  static async logout(): Promise<void> {
-    // Call backend logout if needed
-    try {
-      await APIClient.post('/api/auth/logout');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-    
-    // Clear local storage
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_user');
-  }
+		const token =
+			response?.data?.payload?.accessToken ??
+			response?.data?.accessToken ??
+			response?.data?.token;
 
-  static async getCurrentUser(): Promise<AuthUser | null> {
-    try {
-      const user = localStorage.getItem('auth_user');
-      return user ? JSON.parse(user) : null;
-    } catch {
-      return null;
-    }
-  }
+		const user =
+			response?.data?.payload?.user ??
+			response?.data?.user ??
+			{
+				id: response?.data?.payload?.id ?? 'user-1',
+				name: response?.data?.payload?.firstName || credentials.username,
+				email: response?.data?.payload?.email || credentials.username,
+				role: 'assessor',
+			};
 
-  static getToken(): string | null {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('auth_token');
-    }
-    return null;
-  }
+		if (typeof window !== 'undefined') {
+			if (token) {
+				localStorage.setItem('accessToken', token);
+			}
 
-  static isAuthenticated(): boolean {
-    return this.getToken() !== null;
-  }
+			if (user) {
+				localStorage.setItem('auth_user', JSON.stringify(user));
+			}
+		}
+
+		return response.data;
+	}
+
+	static async logout() {
+		if (typeof window !== 'undefined') {
+			localStorage.removeItem('accessToken');
+			localStorage.removeItem('refreshToken');
+			localStorage.removeItem('auth_user');
+		}
+
+		return true;
+	}
 }
+
+export const login = AuthService.login;

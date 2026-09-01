@@ -1,6 +1,13 @@
 import { create } from "zustand";
 
-export type AssessorRole = "assessor" | "senior_assessor" | "supervisor";
+export type AssessorRole =
+  | "customer"
+  | "manager"
+  | "case_executor"
+  | "assessor"
+  | "data_encoder"
+  | "senior_assessor"
+  | "supervisor";
 
 export interface Case {
   id: string;

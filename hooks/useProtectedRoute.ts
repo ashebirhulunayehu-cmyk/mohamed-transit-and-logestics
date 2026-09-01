@@ -18,18 +18,18 @@ export function useProtectedRoute(allowedRoles?: string[]) {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(`/${lang}/login`);
+      router.push(`/${lang}/auth/login`);
       return;
     }
 
     if (allowedRoles && user && !allowedRoles.includes(user.role)) {
       // Redirect to appropriate dashboard based on role
       if (user.role === 'assessor') {
-        router.push(`/${lang}/assessor/dashboard`);
+        router.push(`/${lang}/admin/dashboard`);
       } else if (user.role === 'importer') {
-        router.push(`/${lang}/importer/dashboard`);
+        router.push(`/${lang}/customer`);
       } else {
-        router.push(`/${lang}/login`);
+        router.push(`/${lang}/auth/login`);
       }
     }
   }, [isAuthenticated, user, allowedRoles, router, lang]);

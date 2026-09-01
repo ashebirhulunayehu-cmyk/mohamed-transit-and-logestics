@@ -8,9 +8,9 @@ export function ServiceReviewStats() {
   const stats = useServiceReviewStore((state) => state.stats);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {/* Awaiting Review */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 border-l-4 border-l-amber-500 shadow-sm flex justify-between items-start">
+      <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-amber-500 bg-white p-5 shadow-sm">
         <div>
           <p className="text-xs font-medium text-slate-500">Awaiting review</p>
           <p className="text-3xl font-bold text-slate-900 mt-2">{stats.awaitingReview}</p>
@@ -19,7 +19,7 @@ export function ServiceReviewStats() {
       </div>
 
       {/* Red Channel */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 border-l-4 border-l-rose-500 shadow-sm flex justify-between items-start">
+      <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-rose-500 bg-white p-5 shadow-sm">
         <div>
           <p className="text-xs font-medium text-slate-500">Red channel</p>
           <p className="text-3xl font-bold text-slate-900 mt-2">{stats.redChannel}</p>
@@ -29,7 +29,7 @@ export function ServiceReviewStats() {
       </div>
 
       {/* Submitted for review */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 border-l-4 border-l-sky-500 shadow-sm flex justify-between items-start">
+      <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-sky-500 bg-white p-5 shadow-sm">
         <div>
           <p className="text-xs font-medium text-slate-500">Submitted for review</p>
           <p className="text-3xl font-bold text-slate-900 mt-2">{stats.submittedForReview}</p>
@@ -38,7 +38,7 @@ export function ServiceReviewStats() {
       </div>
 
       {/* Signed Off */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 border-l-4 border-l-emerald-500 shadow-sm flex justify-between items-start">
+      <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-emerald-500 bg-white p-5 shadow-sm">
         <div>
           <p className="text-xs font-medium text-slate-500">Signed off</p>
           <p className="text-3xl font-bold text-slate-900 mt-2">{stats.signedOff}</p>

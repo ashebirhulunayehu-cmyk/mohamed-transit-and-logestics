@@ -4,11 +4,13 @@ import React from "react";
 import { useServiceReviewStore } from "../serviceReview.store";
 import { StageEvidence } from "./StageEvidence";
 import { AssessmentDecision } from "./AssessmentDecision";
-import { ArrowRight, ShieldAlert, Lock, Clock } from "lucide-react";
+import { ArrowRight, ShieldAlert } from "lucide-react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 
 export function ServiceReviewDetails() {
   const selectedCase = useServiceReviewStore((state) => state.getSelectedCase());
+  const { lang = "en" } = useParams<{ lang: string }>();
 
   if (!selectedCase) {
     return (
@@ -19,7 +21,7 @@ export function ServiceReviewDetails() {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
+    <div className="space-y-6 rounded-xl border border-slate-200/80 bg-white p-6 shadow-sm">
       {/* Top Header */}
       <div className="flex items-start justify-between border-b border-slate-100 pb-5">
         <div>
@@ -43,8 +45,8 @@ export function ServiceReviewDetails() {
         </div>
 
         <Link
-          href={`./service-reviews/${selectedCase.id}`}
-          className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+          href={`/${lang}/admin/assessor/service-reviews/${selectedCase.id}`}
+          className="flex items-center gap-2 rounded border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
         >
           Open case
           <ArrowRight className="w-3.5 h-3.5" />

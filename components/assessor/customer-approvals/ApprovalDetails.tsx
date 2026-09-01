@@ -15,9 +15,19 @@ import {
 
 interface ApprovalDetailsProps {
   applicant: ApprovalApplicant;
+  onApprove?: (id?: string, note?: string) => void;
+  onReturn?: (id?: string, note?: string) => void;
+  onRevision?: (id?: string, note?: string) => void;
+  onReject?: (id?: string, note?: string) => void;
 }
 
-export function ApprovalDetails({ applicant }: ApprovalDetailsProps) {
+export function ApprovalDetails({
+  applicant,
+  onApprove,
+  onReturn,
+  onRevision,
+  onReject,
+}: ApprovalDetailsProps) {
   const [note, setNote] = useState("");
 
   const getStatusBadge = (status: string) => {
@@ -141,15 +151,27 @@ export function ApprovalDetails({ applicant }: ApprovalDetailsProps) {
         />
 
         <div className="flex items-center gap-3 mt-4">
-          <button className="flex items-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-sm font-medium transition-colors">
+          <button
+            type="button"
+            onClick={() => onApprove?.(applicant.id, note)}
+            className="flex items-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-sm font-medium transition-colors"
+          >
             <CheckCircle2 className="w-4 h-4" />
             Approve importer
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors">
+          <button
+            type="button"
+            onClick={() => onRevision?.(applicant.id, note) ?? onReturn?.(applicant.id, note)}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors"
+          >
             <RotateCcw className="w-4 h-4" />
             Return for revision
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors">
+          <button
+            type="button"
+            onClick={() => onReject?.(applicant.id, note)}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors"
+          >
             <XCircle className="w-4 h-4" />
             Reject
           </button>

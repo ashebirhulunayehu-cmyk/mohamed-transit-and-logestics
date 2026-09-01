@@ -30,27 +30,27 @@ export type PrototypeRole =
 const assessmentItems = [
   {
     label: "Customer Approvals",
-    href: "/assessor/customer-approvals",
+    href: "/admin/assessor/customer-approvals",
     icon: UserCheck,
   },
   {
     label: "Service Reviews",
-    href: "/assessor/service-reviews",
+    href: "/admin/assessor/service-reviews",
     icon: ClipboardCheck,
   },
   {
     label: "Services",
-    href: "/assessor/services",
+    href: "/admin/assessor/services",
     icon: BriefcaseBusiness,
   },
   {
     label: "Documents",
-    href: "/assessor/documents",
+    href: "/admin/assessor/documents",
     icon: FileText,
   },
   {
     label: "Assessment Logs",
-    href: "/assessor/assessment-logs",
+    href: "/admin/assessor/assessment-logs",
     icon: History,
   },
 ];
@@ -58,12 +58,12 @@ const assessmentItems = [
 const communicationItems = [
   {
     label: "Messages",
-    href: "/assessor/messages",
+    href: "/admin/assessor/messages",
     icon: MessageSquare,
   },
   {
     label: "Notifications",
-    href: "/assessor/notifications",
+    href: "/admin/assessor/notifications",
     icon: Bell,
   },
 ];
@@ -71,7 +71,7 @@ const communicationItems = [
 const accountItems = [
   {
     label: "Profile",
-    href: "/assessor/profile",
+    href: "/admin/assessor/profile",
     icon: UserCircle,
   },
 ];
@@ -120,7 +120,7 @@ export default function AssessorSidebar() {
 
   const isActive = (href: string) => {
     const fullHref = `/${lang}${href}`;
-    if (href === "/assessor/dashboard") {
+    if (href === "/admin/dashboard") {
       return pathname === fullHref;
     }
     return pathname.startsWith(fullHref);
@@ -177,7 +177,7 @@ export default function AssessorSidebar() {
       {/* Brand */}
       <div className="flex h-[76px] items-center border-b border-slate-200 px-4">
         <Link
-          href={`/${lang}/assessor/dashboard`}
+          href={`/${lang}/admin/dashboard`}
           className="flex min-w-0 items-center gap-3"
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
@@ -210,7 +210,7 @@ export default function AssessorSidebar() {
 
           {renderNavItem({
             label: "Dashboard",
-            href: "/assessor/dashboard",
+            href: "/admin/dashboard",
             icon: LayoutDashboard,
           })}
         </div>
@@ -305,7 +305,7 @@ export default function AssessorSidebar() {
                       key={role.value}
                       type="button"
                       onClick={() => {
-                        setSelectedRole(role.value as PrototypeRole);
+                        setSelectedRole(role.value);
                         setRoleOpen(false);
                       }}
                       className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${

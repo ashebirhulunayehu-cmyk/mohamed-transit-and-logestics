@@ -5,7 +5,7 @@ export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: 'assessor' | 'importer' | 'admin';
+  role: string; // Changed to string to support all custom and backend roles (customer, assessor, admin, etc.)
 }
 
 interface AuthState {
