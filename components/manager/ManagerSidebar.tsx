@@ -62,7 +62,12 @@ export default function ManagerSidebar() {
 
   const isActive = (href: string) => {
     const fullHref = `/${lang}${href}`;
-    if (href === "/admin/manager/dashboard") return pathname === fullHref;
+    const managerRoot = `/${lang}/admin/manager`;
+
+    if (href === "/admin/manager/dashboard") {
+      return pathname === fullHref || pathname === managerRoot;
+    }
+
     return pathname.startsWith(fullHref);
   };
 

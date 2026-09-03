@@ -69,26 +69,30 @@ export const ManagerDashboardStats: React.FC<ManagerDashboardStatsProps> = ({
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div className="w-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
       {items.map((item, idx) => {
         const Icon = item.icon;
         return (
           <div
             key={idx}
-            className={`bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-200 border-l-4 ${item.borderColor}`}
+            className={`w-full bg-white rounded-xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-200 border-l-4 ${item.borderColor}`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">
                 {item.title}
               </span>
-              <div className={`p-2 rounded-lg ${item.bgColor}`}>
+              <div className={`p-2 rounded-lg shrink-0 ${item.bgColor}`}>
                 <Icon className={`w-5 h-5 ${item.color}`} />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-slate-900">{item.value}</span>
+              <span className="text-2xl lg:text-3xl font-bold text-slate-900">
+                {item.value}
+              </span>
               {item.subtext && (
-                <span className="text-xs text-slate-500 font-medium">{item.subtext}</span>
+                <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                  {item.subtext}
+                </span>
               )}
             </div>
           </div>

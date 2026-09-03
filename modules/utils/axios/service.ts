@@ -1,16 +1,16 @@
 import axios from "axios";
-import type { AxiosError, AxiosInstance, AxiosResponse } from "axios";
-
+import type { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from "axios";
 
 import { config } from "./config";
 import { getToken } from "../token";
 import { getTokenClient } from "../token/client-token.storage";
 
-interface ApiResponse<T> {
+interface ApiResponse<T = any> {
   statusCode?: number;
   error?: boolean;
   errors?: string[] | Record<string, string[]>;
   message?: string;
+  payload?: T;
   response?: {
     data: T | null;
   };
@@ -19,26 +19,43 @@ interface ApiResponse<T> {
 const service: AxiosInstance = axios.create({
   baseURL: config.base_url.base,
   timeout: config.request_timeout,
+  // 💡 የካሽ (Caching) ችግር እንዳይፈጠር እና 304 ኤርረርን ለመከላከል ይህንን ሄደር ጨምረናል
+  headers: {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
+  },
 });
 
 // Request Interceptor
 service.interceptors.request.use(
-  async (config: any) => {
+  async (config: InternalAxiosRequestConfig) => {
     let token = await getToken();
     if (!token) {
       token = getTokenClient();
     }
 
-    if (token != null) {
-      (config.headers as any)["Authorization"] = `Bearer ${token}`;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
+    // FormData በሚሆንበት ጊዜ Content-Type-ን Axios boundary ራሱ እንዲያዘጋጅ መተው
+    if (config.data instanceof FormData) {
+      delete config.headers["Content-Type"];
+    }
+
+    // Form-urlencoded Handling
     if (
-      config.method === "post" &&
-      (config.headers as any)["Content-Type"] ===
-        "application/x-www-form-urlencoded"
+      config.method?.toLowerCase() === "post" &&
+      config.headers["Content-Type"] === "application/x-www-form-urlencoded" &&
+      typeof config.data === "object" &&
+      !(config.data instanceof FormData)
     ) {
-      config.data = JSON.stringify(config.data);
+      const params = new URLSearchParams();
+      Object.keys(config.data).forEach((key) => {
+        params.append(key, (config.data as any)[key]);
+      });
+      config.data = params;
     }
 
     return config;
@@ -51,48 +68,58 @@ service.interceptors.response.use(
   (response: AxiosResponse<ApiResponse<any>>) => {
     const data = response.data;
 
-    // SUCCESS LOGIC: Handle both nested and flat responses
-    if (data.statusCode === 200 || response.status === 200) {
-      // If backend uses the old { response: { data: ... } } structure
-      if (data.response && data.response.data !== undefined) {
+    if (response.status === 200 || response.status === 201 || data?.statusCode === 200) {
+      if (data?.response?.data !== undefined) {
         return data.response.data;
       }
-      // If backend uses a new "flat" structure, return the whole body
+      if (data?.payload !== undefined) {
+        return data.payload;
+      }
       return data;
     }
 
-    // AUTH LOGIC
-    if (data.statusCode === 401 || response.status === 401) {
-      const currentLocale =
-        typeof window !== "undefined"
-          ? window.location.pathname.split("/")[1] || "en"
-          : "en";
+    if (response.status === 401 || data?.statusCode === 401) {
       if (typeof window !== "undefined") {
+        const currentLocale = window.location.pathname.split("/")[1] || "en";
         window.location.href = `/${currentLocale}/auth/login`;
       }
       return Promise.reject("Session expired");
     }
 
-    return Promise.reject(data.message || "Unexpected response format");
+    return Promise.reject(data?.message || "Unexpected response format");
   },
   (error: AxiosError<any>) => {
-    // IMPROVED ERROR LOGIC: No more silent crashes
     let errorMessage = "An unexpected error occurred";
 
     if (error.response) {
       const data = error.response.data;
+      console.error("❌ API Error Path:", error.config?.url);
+      console.error("❌ API Error Status:", error.response.status, data);
 
-      // Log the error so you can see exactly what the backend sent
-      console.error("❌ API Error:", error.response.status, data);
-
-      if (data?.message) {
-        errorMessage = data.message;
+      if (error.response.status === 404) {
+        errorMessage = `Server Error: 404 Not Found (${error.config?.baseURL || ''}${error.config?.url || ''})`;
+      } else if (error.response.status === 401) {
+        if (typeof window !== "undefined") {
+          const currentLocale = window.location.pathname.split("/")[1] || "en";
+          window.location.href = `/${currentLocale}/auth/login`;
+        }
+        return Promise.reject("Unauthorized access");
       } else if (data?.errors) {
-        errorMessage = Array.isArray(data.errors)
-          ? data.errors.join(", ")
-          : Object.values(data.errors).flat().join(", ");
+        // ASP.NET Core Validation ProblemDetails (Validation Error) አያያዝ
+        if (typeof data.errors === "object" && !Array.isArray(data.errors)) {
+          const validationMessages = Object.entries(data.errors)
+            .map(([field, msgs]) => `${field}: ${(msgs as string[]).join(", ")}`)
+            .join(" | ");
+          console.error("📋 Detailed Validation Errors:", data.errors);
+          errorMessage = validationMessages;
+        } else if (Array.isArray(data.errors)) {
+          errorMessage = data.errors.join(", ");
+        }
+      } else if (data?.message) {
+        errorMessage = data.message;
+      } else if (data?.title) {
+        errorMessage = data.title;
       } else {
-        // Fallback to standard HTTP status text (e.g., "Not Found")
         errorMessage = `Server Error: ${error.response.status} ${error.response.statusText}`;
       }
     } else if (error.request) {

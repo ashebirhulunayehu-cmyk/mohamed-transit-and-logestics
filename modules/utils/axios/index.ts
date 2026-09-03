@@ -2,51 +2,67 @@ import { config } from "./config";
 import { service } from "./service";
 import type { AxiosRequestConfig } from "axios";
 
-type RequestOptions = {
+export type RequestOptions = {
   url: string;
   method?: AxiosRequestConfig["method"];
   params?: AxiosRequestConfig["params"];
   data?: unknown;
   headersType?: string;
+  headers?: Record<string, string>; // ተጨማሪ headers ለመቀበል
   responseType?: AxiosRequestConfig["responseType"];
 };
 
 const { default_headers } = config;
 
-const http = (option: RequestOptions) => {
-  const { url, method, params, data, headersType, responseType } = option;
-  // If sending FormData, do not set Content-Type so axios/browser can add the boundary
-  const headers =
+const http = <T = unknown>(option: RequestOptions): Promise<T> => {
+  const { url, method, params, data, headersType, headers: customHeaders, responseType } = option;
+
+  // FormData ከሆነ Browser-ኡ ራሱ boundary እንዲያዘጋጅ Content-Type አይላክም
+  const contentTypeHeader =
     data instanceof FormData
       ? {}
       : { "Content-Type": headersType || default_headers };
 
+  const finalHeaders = {
+    ...contentTypeHeader,
+    ...customHeaders,
+  };
+
   return service({
-    url: url,
+    url,
     method,
     params,
     data,
-    responseType: responseType,
-    headers,
-  });
+    responseType,
+    headers: finalHeaders,
+  }) as Promise<T>;
 };
 
 const httpClient = {
-  get: <T = unknown>(option: RequestOptions) => {
-    return http({ method: "get", ...option }) as unknown as T;
+  get: <T = unknown>(option: RequestOptions): Promise<T> => {
+    return http<T>({ method: "get", ...option });
   },
-  post: <T = unknown>(option: string | RequestOptions, data?: unknown) => {
-    const request = typeof option === "string"
-      ? { url: option, data }
-      : option;
 
-    return http({ method: "post", ...request }) as unknown as T;
+  post: <T = unknown>(option: string | RequestOptions, data?: unknown): Promise<T> => {
+    const request =
+      typeof option === "string"
+        ? { url: option, data }
+        : option;
+
+    return http<T>({ method: "post", ...request });
   },
-  delete: <T = unknown>(option: RequestOptions) => {
-    return http({ method: "delete", ...option }) as unknown as T;
+
+  put: <T = unknown>(option: string | RequestOptions, data?: unknown): Promise<T> => {
+    const request =
+      typeof option === "string"
+        ? { url: option, data }
+        : option;
+
+    return http<T>({ method: "put", ...request });
   },
-  put: <T = unknown>(option: RequestOptions) => {
-    return http({ method: "put", ...option }) as unknown as T;
+
+  delete: <T = unknown>(option: RequestOptions): Promise<T> => {
+    return http<T>({ method: "delete", ...option });
   },
 };
 

@@ -1,20 +1,22 @@
 "use client";
 
 const tokenKeys = {
-  accessToken: "SkyTech-portal-accessToken",
-  refreshToken: "SkyTech-portal-refreshToken",
+  accessToken: "MohamedTransit-portal-accessToken",
+  refreshToken: "MohamedTransit-portal-refreshToken",
 };
 
 export interface StoreTokenRequest {
   token: string;
-  refresh_token: string;
+  refresh_token?: string;
 }
 
 export const storeTokenClient = (request: StoreTokenRequest) => {
   try {
     if (typeof window !== "undefined") {
       localStorage.setItem(tokenKeys.accessToken, request.token);
-      localStorage.setItem(tokenKeys.refreshToken, request.refresh_token);
+      if (request.refresh_token) {
+        localStorage.setItem(tokenKeys.refreshToken, request.refresh_token);
+      }
     }
   } catch (error) {
     console.error("Failed to store token:", error);
@@ -57,5 +59,5 @@ export const getRefreshTokenClient = (): string | null => {
   }
 };
 
-export const storeToken = (request: StoreTokenRequest) => storeTokenClient(request);
-export const deleteTokens = () => deleteTokensClient();
+export const storeToken = async (request: StoreTokenRequest) => storeTokenClient(request);
+export const deleteTokens = async () => deleteTokensClient();

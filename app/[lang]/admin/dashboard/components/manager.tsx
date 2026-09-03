@@ -1,62 +1,130 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Filter, RotateCcw } from "lucide-react";
 import ManagerHeader from "@/components/manager/ManagerHeader";
 import ManagerSidebar from "@/components/manager/ManagerSidebar";
-import { ManagerDashboardStats } from "@/components/manager/ManagerDashboardStats";
-import { CaseTable } from "@/components/manager/CaseTable";
-import { TeamPerformance } from "@/components/manager/TeamPerformance";
-import { RecentActivity } from "@/components/manager/RecentActivity";
-import { useManagerStore } from "@/store/managerStore";
-import { managerMockCases, managerMockStats, managerTeamMembers, managerRecentActivities } from "@/data/managerMockData";
+import { PriorityQueue } from "@/components/manager/PriorityQueue";
+import { LatestActivity } from "@/components/manager/LatestActivity";
+import { Database, AlertTriangle, Clock, CheckCircle2 } from "lucide-react";
 
 export default function ManagerDashboard() {
-  const {
-    sidebarCollapsed,
-    selectedCase,
-    filters,
-    stats,
-    setSelectedCase,
-    setFilters,
-    setStats,
-    resetFilters,
-  } = useManagerStore();
+  const stats = [
+    {
+      title: "Open cases",
+      value: "5",
+      description: "risk or review",
+      icon: <Database className="w-6 h-6 text-blue-600" />,
+    },
+    {
+      title: "Needs attention",
+      value: "4",
+      description: "risk or review",
+      icon: <AlertTriangle className="w-6 h-6 text-red-600" />,
+    },
+    {
+      title: "Due within 48h",
+      value: "3",
+      description: "pending approval",
+      icon: <Clock className="w-6 h-6 text-orange-600" />,
+    },
+    {
+      title: "Cleared this month",
+      value: "1",
+      description: "completed",
+      icon: <CheckCircle2 className="w-6 h-6 text-emerald-600" />,
+    },
+  ];
 
-  const [filteredCases, setFilteredCases] = useState(managerMockCases);
+  const queueItems = [
+    {
+      id: "SVC-2026-0417",
+      title: "Bulk fertiliser consignment — 4 × 40ft",
+      description: "Horizon Agro Import PLC · Jebel Ali, UAE → Djibouti → Modjo Dry Port",
+      tags: [
+        { label: "Requires customer action", color: "red" as const },
+        { label: "Yellow channel", color: "yellow" as const },
+      ],
+      updatedTime: "Updated 18h ago",
+    },
+    {
+      id: "SVC-2026-0392",
+      title: "Hot-rolled steel coils — 12 × 40ft",
+      description: "Nile Steel & Metals Trading · Mundra, India → Djibouti → Kality Terminal",
+      tags: [
+        { label: "Blocked", color: "red" as const },
+        { label: "Red channel", color: "red" as const },
+      ],
+      updatedTime: "Updated 2d ago",
+    },
+    {
+      id: "SVC-2026-0448",
+      title: "Cold-chain pharmaceutical airfreight",
+      description: "Abyssinia Pharmaceuticals Import · Brussels, Belgium → Bole International Airport Cargo Terminal",
+      tags: [
+        { label: "In progress", color: "blue" as const },
+        { label: "Green channel", color: "green" as const },
+      ],
+      updatedTime: "Updated 2h ago",
+    },
+    {
+      id: "SVC-2026-0431",
+      title: "Circular knitting machinery — 3 × 40ft OT",
+      description: "Blue Nile Textile Sourcing · Shanghai, China → Djibouti → Modjo Dry Port",
+      tags: [
+        { label: "Needs review", color: "orange" as const },
+        { label: "Yellow channel", color: "yellow" as const },
+      ],
+      updatedTime: "Updated 17h ago",
+    },
+    {
+      id: "SVC-2026-0460",
+      title: "Excavator & attachments — local permission",
+      description: "Rift Valley Machinery Import · Nagoya, Japan → Djibouti → Adama",
+      tags: [
+        { label: "Pending", color: "orange" as const },
+        { label: "Blue channel", color: "blue" as const },
+      ],
+      updatedTime: "Updated 1d ago",
+    },
+  ];
 
-  useEffect(() => {
-    // Set initial stats
-    setStats(managerMockStats);
-  }, [setStats]);
-
-  useEffect(() => {
-    // Filter cases based on filters
-    let filtered = managerMockCases;
-
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter(
-        (c) =>
-          c.caseNumber.toLowerCase().includes(searchLower) ||
-          c.importerName.toLowerCase().includes(searchLower)
-      );
-    }
-
-    if (filters.status) {
-      filtered = filtered.filter((c) => c.status === filters.status);
-    }
-
-    if (filters.priority) {
-      filtered = filtered.filter((c) => c.priority === filters.priority);
-    }
-
-    if (filters.assignedTo) {
-      filtered = filtered.filter((c) => c.assignedTo === filters.assignedTo);
-    }
-
-    setFilteredCases(filtered);
-  }, [filters]);
+  const activityItems = [
+    {
+      title: "Duty & tax assessment issued",
+      description: "ETB 486,214.00 payable on SVC-2026-0417. Settle before 01 Aug to avoid demurrage.",
+      type: "payment" as const,
+      timestamp: "48m ago",
+    },
+    {
+      title: "Red channel block on SVC-2026-0392",
+      description: "Certificate of origin mismatch. Inspection halted pending corrected mill test certificate.",
+      type: "risk" as const,
+      timestamp: "1h ago",
+    },
+    {
+      title: "KYC awaiting your review",
+      description: "Abyssinia Pharmaceuticals Import submitted 5 KYC documents for verification.",
+      type: "approval" as const,
+      timestamp: "2h ago",
+    },
+    {
+      title: "Temperature log uploaded",
+      description: "Temperature-Log-UID-1-6.csv added to Arrival stage of SVC-2026-0448.",
+      type: "document" as const,
+      timestamp: "2h ago",
+    },
+    {
+      title: "Assessment submitted for review",
+      description: "SVC-2026-0431 moved to Needs review — valuation query raised.",
+      type: "service" as const,
+      timestamp: "17h ago",
+    },
+    {
+      title: "Inspection completed",
+      description: "No discrepancies found on SVC-2026-0417. Seals intact on all four containers.",
+      type: "assessment" as const,
+      timestamp: "6d ago",
+    },
+  ];
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -64,223 +132,63 @@ export default function ManagerDashboard() {
       <ManagerSidebar />
 
       {/* Main Content */}
-      <div
-        className={`flex flex-col flex-1 transition-all duration-300 ${
-          sidebarCollapsed ? "ml-[76px]" : "ml-[270px]"
-        }`}
-      >
-        {/* Header */}
+      <div className="flex-1 flex flex-col min-w-0">
         <ManagerHeader />
 
-        {/* Page Content */}
-        <main className="mt-[76px] flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto">
           <div className="p-4 sm:p-6 lg:p-8">
-            {/* Page Title */}
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-slate-900">
-                Operations Dashboard
+            {/* Header Section */}
+            <div className="mb-6">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                IMPORT DIRECTORATE
+              </p>
+              <h1 className="text-4xl font-bold text-slate-900">
+                Directorate overview
               </h1>
-              <p className="mt-2 text-sm text-slate-600">
-                Manage cases, monitor team performance, and track KPIs
+              <p className="text-slate-600 text-sm mt-2">
+                Operations across every importer, corridor and case.
               </p>
             </div>
 
-            {/* Stats Cards */}
-            <ManagerDashboardStats stats={stats} />
-
-            {/* Team Performance Section */}
-            <TeamPerformance teamMembers={managerTeamMembers} />
-
-            {/* Recent Activity Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-              <div className="lg:col-span-2">
-                <RecentActivity activities={managerRecentActivities} />
-              </div>
-              
-              {/* Quick Actions */}
-              <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5">
-                <h3 className="text-sm font-bold text-slate-800 mb-4">Quick Actions</h3>
-                <div className="space-y-2.5">
-                  <button className="w-full px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-all">
-                    + New Case
-                  </button>
-                  <button className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-slate-900 text-sm font-medium hover:bg-slate-50 transition-all">
-                    Generate Report
-                  </button>
-                  <button className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-slate-900 text-sm font-medium hover:bg-slate-50 transition-all">
-                    Team Schedule
-                  </button>
-                  <button className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-slate-900 text-sm font-medium hover:bg-slate-50 transition-all">
-                    Export Data
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Filters Section */}
-            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-5 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-slate-500" />
-                  Filters
-                </h3>
-                <button
-                  onClick={() => resetFilters()}
-                  className="flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg px-3 py-1.5 transition-all"
+            {/* Stats Grid - 2x2 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+              {stats.map((stat, idx) => (
+                <div
+                  key={idx}
+                  className="bg-white rounded-xl border border-slate-200/80 p-6 shadow-sm"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                  Reset
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Search */}
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Search
-                  </label>
-                  <input
-                    type="text"
-                    value={filters.search}
-                    onChange={(e) => setFilters({ search: e.target.value })}
-                    placeholder="Case or importer..."
-                    className="mt-1.5 w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-                  />
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                        {stat.title}
+                      </p>
+                      <p className="text-5xl font-bold text-slate-900">
+                        {stat.value}
+                      </p>
+                      <p className="text-sm text-slate-600 mt-2">
+                        {stat.description}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {stat.icon}
+                    </div>
+                  </div>
                 </div>
-
-                {/* Status Filter */}
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Status
-                  </label>
-                  <select
-                    value={filters.status || ""}
-                    onChange={(e) =>
-                      setFilters({ status: e.target.value || undefined })
-                    }
-                    className="mt-1.5 w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 text-slate-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-                  >
-                    <option value="">All Statuses</option>
-                    <option value="Pending">Pending</option>
-                    <option value="In Review">In Review</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                </div>
-
-                {/* Priority Filter */}
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Priority
-                  </label>
-                  <select
-                    value={filters.priority || ""}
-                    onChange={(e) =>
-                      setFilters({ priority: e.target.value || undefined })
-                    }
-                    className="mt-1.5 w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 text-slate-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-                  >
-                    <option value="">All Priorities</option>
-                    <option value="CRITICAL">Critical</option>
-                    <option value="HIGH">High</option>
-                    <option value="NORMAL">Normal</option>
-                    <option value="LOW">Low</option>
-                  </select>
-                </div>
-
-                {/* Assigned To Filter */}
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Assigned To
-                  </label>
-                  <select
-                    value={filters.assignedTo || ""}
-                    onChange={(e) =>
-                      setFilters({ assignedTo: e.target.value || undefined })
-                    }
-                    className="mt-1.5 w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 text-slate-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-                  >
-                    <option value="">All Team Members</option>
-                    <option value="John Okonkwo">John Okonkwo</option>
-                    <option value="Sarah Mensah">Sarah Mensah</option>
-                    <option value="Ahmed Hassan">Ahmed Hassan</option>
-                    <option value="Fatima Ibrahim">Fatima Ibrahim</option>
-                    <option value="David Kipchoge">David Kipchoge</option>
-                  </select>
-                </div>
-              </div>
+              ))}
             </div>
 
-            {/* Cases Table */}
-            <CaseTable
-              cases={filteredCases}
-              selectedId={selectedCase?.id || null}
-              onSelectCase={(id) => {
-                const caseData = managerMockCases.find((c) => c.id === id);
-                if (caseData) {
-                  setSelectedCase(caseData);
-                }
-              }}
-            />
-
-            {/* Case Details Panel */}
-            {selectedCase && (
-              <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 mb-6">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">
-                  Case Details
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Case Number
-                    </p>
-                    <p className="mt-1.5 text-sm font-medium text-slate-900">
-                      {selectedCase.caseNumber}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Importer
-                    </p>
-                    <p className="mt-1.5 text-sm font-medium text-slate-900">
-                      {selectedCase.importerName}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Status
-                    </p>
-                    <p className="mt-1.5 text-sm font-medium text-slate-900">
-                      {selectedCase.status}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Priority
-                    </p>
-                    <p className="mt-1.5 text-sm font-medium text-slate-900">
-                      {selectedCase.priority}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Assigned To
-                    </p>
-                    <p className="mt-1.5 text-sm font-medium text-slate-900">
-                      {selectedCase.assignedTo}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      Due Date
-                    </p>
-                    <p className="mt-1.5 text-sm font-medium text-slate-900">
-                      {selectedCase.dueDate}
-                    </p>
-                  </div>
-                </div>
+            {/* Priority Queue and Latest Activity */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Priority Queue */}
+              <div className="lg:col-span-2">
+                <PriorityQueue items={queueItems} />
               </div>
-            )}
+
+              {/* Latest Activity */}
+              <div>
+                <LatestActivity items={activityItems} />
+              </div>
+            </div>
           </div>
         </main>
       </div>

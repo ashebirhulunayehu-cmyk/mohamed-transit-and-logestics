@@ -3,3 +3,10 @@ export const authRoutes = Object.freeze({
   signup: "/auth/signup",
   forgot_password: "/auth/forgot_password",
 });
+export const authRoutes = Object.freeze({
+  login: "/auth/login",
+  signup: "/auth/signup",
+  forgot_password: "/auth/forgot_password",
+  reset_password: "/auth/reset_password",
+  change_password: "/auth/change_password",
+});

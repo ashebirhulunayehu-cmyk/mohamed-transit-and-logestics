@@ -15,20 +15,25 @@ export interface AuthUser {
 
 export class AuthService {
 	static async login(credentials: LoginCredentials) {
-		const response = await axiosInstance.post('/v1/User/Login', credentials);
+		const response: any = await axiosInstance.post('/v1/User/Login', credentials);
+
+		const payload = response?.data?.payload ?? response?.payload ?? response?.data ?? {};
 
 		const token =
-			response?.data?.payload?.accessToken ??
+			payload?.accessToken ??
 			response?.data?.accessToken ??
-			response?.data?.token;
+			response?.accessToken ??
+			response?.data?.token ??
+			response?.token;
 
 		const user =
-			response?.data?.payload?.user ??
+			payload?.user ??
 			response?.data?.user ??
+			response?.user ??
 			{
-				id: response?.data?.payload?.id ?? 'user-1',
-				name: response?.data?.payload?.firstName || credentials.username,
-				email: response?.data?.payload?.email || credentials.username,
+				id: payload?.id ?? response?.data?.id ?? 'user-1',
+				name: payload?.firstName || credentials.username,
+				email: payload?.email || credentials.username,
 				role: 'assessor',
 			};
 
@@ -42,7 +47,7 @@ export class AuthService {
 			}
 		}
 
-		return response.data;
+		return response?.data ?? response;
 	}
 
 	static async logout() {
