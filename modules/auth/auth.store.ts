@@ -1,147 +1,466 @@
 import { create } from "zustand";
-import { deleteTokens, storeToken } from "../utils/token/client-token.storage";
-import { getUserData, removeUserData, setUserData } from "../utils/token/user.storage";
-import { AuthState, AuthStore, IPasswordPayload, ILogin, IUser } from "./auth.types";
-import { signup } from "./auth.endpoint";
 
-const storedUser = typeof window !== "undefined" ? getUserData() : null;
+import {
+  deleteTokens,
+  storeToken,
+} from "../utils/token/client-token.storage";
 
-const defaultInitState: AuthState = {
-  user: storedUser as IUser | null,
-  error: null,
-  loading: false,
+import {
+  getUserData,
+  removeUserData,
+  setUserData,
+} from "../utils/token/user.storage";
+
+import type {
+  AuthState,
+  AuthStore,
+  ChangePasswordRequest,
+  ForgotPasswordRequest,
+  ILogin,
+  IUser,
+  ResetPasswordRequest,
+} from "./auth.types";
+
+import {
+  changePassword,
+  forgotPassword,
+  login,
+  logout,
+  resetPassword,
+  signup,
+} from "./auth.endpoint";
+
+/* =========================================================
+   Helpers
+========================================================= */
+
+const getErrorMessage = (
+  error: unknown,
+  fallback: string
+): string => {
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return fallback;
 };
 
+const isRecord = (
+  value: unknown
+): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null;
+};
+
+const getString = (value: unknown): string => {
+  return typeof value === "string" ? value : "";
+};
+
+/* =========================================================
+   Initial State
+========================================================= */
+
+const initialState: AuthState = {
+  user:
+    typeof window !== "undefined"
+      ? getUserData()
+      : null,
+
+  loading: false,
+  error: null,
+};
+
+/* =========================================================
+   Auth Store
+========================================================= */
+
 export const useAuthStore = create<AuthStore>((set) => ({
-  ...defaultInitState,
+  ...initialState,
+
+  /* =======================================================
+     LOGIN
+  ======================================================= */
 
   login: async (payload: ILogin) => {
-    set({ loading: true, error: null });
+    set({
+      loading: true,
+      error: null,
+    });
 
     try {
-      const res = await loginRequest(payload);
-      
-      const data = res?.data || res;
-      const userPayload = data?.payload || data?.response?.data || data;
+      /*
+       * Login request
+       *
+       * Frontend:
+       * username/email + password
+       *
+       * Backend:
+       * POST /api/v1/User/Login
+       */
+      const response = await login(payload);
 
-      const token = userPayload?.token || data?.token || userPayload?.accessToken || "";
-      const refreshToken = userPayload?.refreshToken || data?.refreshToken || "";
+      console.log("LOGIN RESPONSE:", response);
 
-      const user: IUser = {
-        id: userPayload?.id || "user-1",
-        email: userPayload?.email || payload.email || payload.username || "",
-        username: userPayload?.username || payload.username || payload.email || "",
-        firstName: userPayload?.firstName || "",
-        lastName: userPayload?.lastName || "",
-        phone: userPayload?.phone || "",
-        roles: userPayload?.userRoles || userPayload?.roles || [],
-        profilePhoto: userPayload?.profilePhoto || "",
+      /* ---------------------------------------------------
+         Normalize backend response
+      --------------------------------------------------- */
+
+      const responseRecord = isRecord(response)
+        ? response
+        : {};
+
+      /*
+       * Some API wrappers return:
+       *
+       * {
+       *   data: {...}
+       * }
+       *
+       * Others may directly return:
+       *
+       * {
+       *   accessToken: "...",
+       *   ...
+       * }
+       */
+
+      const rawData =
+        isRecord(responseRecord.data)
+          ? responseRecord.data
+          : response;
+
+      const dataRecord = isRecord(rawData)
+        ? rawData
+        : {};
+
+      /* ---------------------------------------------------
+         Find actual user payload
+      --------------------------------------------------- */
+
+      const nestedResponse = isRecord(
+        dataRecord.response
+      )
+        ? dataRecord.response
+        : {};
+
+      const payloadData = isRecord(
+        dataRecord.payload
+      )
+        ? dataRecord.payload
+        : {};
+
+      const nestedData = isRecord(
+        nestedResponse.data
+      )
+        ? nestedResponse.data
+        : {};
+
+      const userData = {
+        ...nestedData,
+        ...payloadData,
+        ...dataRecord,
       };
 
-      if (token) {
-        await storeToken({ token, refresh_token: refreshToken });
+      /* ---------------------------------------------------
+         Access Token
+      --------------------------------------------------- */
+
+      const accessToken =
+        getString(userData.accessToken) ||
+        getString(userData.token);
+
+      /* ---------------------------------------------------
+         Refresh Token
+      --------------------------------------------------- */
+
+      const refreshToken =
+        getString(userData.refreshToken);
+
+      /*
+       * IMPORTANT:
+       *
+       * Do NOT use refreshToken as access token.
+       */
+
+      if (!accessToken) {
+        throw new Error(
+          "Login succeeded but access token was not returned by the server."
+        );
       }
 
+      /* ---------------------------------------------------
+         User
+      --------------------------------------------------- */
+
+      const user: IUser = {
+        id:
+          typeof userData.id === "string" ||
+          typeof userData.id === "number"
+            ? userData.id
+            : "user-1",
+
+        username:
+          getString(userData.username) ||
+          getString(userData.userName) ||
+          payload.username ||
+          payload.email ||
+          "",
+
+        email:
+          getString(userData.email) ||
+          payload.email ||
+          payload.username ||
+          "",
+
+        firstName:
+          getString(userData.firstName),
+
+        lastName:
+          getString(userData.lastName),
+
+        phone:
+          getString(userData.phone),
+
+        userRoles:
+          Array.isArray(userData.userRoles)
+            ? userData.userRoles
+            : [],
+
+        roles:
+          Array.isArray(userData.roles)
+            ? (userData.roles as IUser["roles"])
+            : [],
+
+        profilePhoto:
+          getString(userData.profilePhoto),
+      };
+
+      console.log("LOGIN USER:", user);
+
+      console.log(
+        "LOGIN ACCESS TOKEN:",
+        accessToken
+      );
+
+      console.log(
+        "LOGIN REFRESH TOKEN:",
+        refreshToken
+      );
+
+      /* ---------------------------------------------------
+         Save tokens
+      --------------------------------------------------- */
+
+      await storeToken({
+        token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      document.cookie = `transit-portal-accessToken=${encodeURIComponent(accessToken)}; path=/; max-age=7200; SameSite=Lax`;
+
+      /* ---------------------------------------------------
+         Save user
+      --------------------------------------------------- */
+
       setUserData(user);
-      set({ user, loading: false, error: null });
-      return res;
-    } catch (error: any) {
-      const message = typeof error === "string" ? error : error?.message || "Login failed. Please try again.";
-      set({ loading: false, error: message });
-      console.error("Login failed:", message);
+
+      /* ---------------------------------------------------
+         Update Zustand
+      --------------------------------------------------- */
+
+      set({
+        user,
+        loading: false,
+        error: null,
+      });
+
+      return user;
+
+    } catch (error: unknown) {
+      const message = getErrorMessage(
+        error,
+        "Login failed. Please try again."
+      );
+
+      console.error("LOGIN ERROR:", error);
+
+      set({
+        loading: false,
+        error: message,
+      });
+
       throw new Error(message);
     }
   },
+
+  /* =======================================================
+     LOGOUT
+  ======================================================= */
 
   logout: async () => {
-    set({ loading: true });
+    set({
+      loading: true,
+      error: null,
+    });
+
     try {
-      await logoutRequest();
-    } catch (error) {
-      console.error("Logout API call error:", error);
+      await logout();
     } finally {
       await deleteTokens();
+
+      document.cookie = "transit-portal-accessToken=; path=/; max-age=0; SameSite=Lax";
+
       removeUserData();
-      set({ user: null, error: null, loading: false });
+
+      set({
+        user: null,
+        loading: false,
+        error: null,
+      });
     }
   },
 
-  // FormData ወይም IUser መቀበል እንዲችል Type ተስተካክሏል
-  signUp: async (data: FormData | IUser | any) => {
-    set({ loading: true, error: null });
+  /* =======================================================
+     SIGN UP
+  ======================================================= */
+
+  signUp: async (payload) => {
+    set({
+      loading: true,
+      error: null,
+    });
+
     try {
-      const res = await signup(data);
-      set({ loading: false, error: null });
-      return res;
-    } catch (error: any) {
-      const message = typeof error === "string" ? error : error?.message || "Sign up failed.";
-      set({ loading: false, error: message });
+      await signup(payload);
+
+      set({
+        loading: false,
+        error: null,
+      });
+
+    } catch (error: unknown) {
+      const message = getErrorMessage(
+        error,
+        "Sign up failed."
+      );
+
+      set({
+        loading: false,
+        error: message,
+      });
+
       throw new Error(message);
     }
   },
 
-  forgotPassword: async (payload: IPasswordPayload) => {
-    set({ loading: true, error: null });
+  /* =======================================================
+     FORGOT PASSWORD
+  ======================================================= */
+
+  forgotPassword: async (
+    payload: ForgotPasswordRequest
+  ) => {
+    set({
+      loading: true,
+      error: null,
+    });
+
     try {
-      const res = await forgotPassword(payload);
-      set({ loading: false, error: null });
-      return res;
-    } catch (error: any) {
-      const message = typeof error === "string" ? error : error?.message || "Failed to reset password.";
-      set({ loading: false, error: message });
+      await forgotPassword(payload);
+
+      set({
+        loading: false,
+        error: null,
+      });
+
+    } catch (error: unknown) {
+      const message = getErrorMessage(
+        error,
+        "Password recovery failed."
+      );
+
+      set({
+        loading: false,
+        error: message,
+      });
+
       throw new Error(message);
     }
   },
 
-  updatePassword: async (payload: IPasswordPayload) => {
-    set({ loading: true, error: null });
+  /* =======================================================
+     CHANGE PASSWORD
+  ======================================================= */
+
+  updatePassword: async (
+    payload: ChangePasswordRequest
+  ) => {
+    set({
+      loading: true,
+      error: null,
+    });
+
     try {
-      const res = await changePassword(payload);
-      set({ loading: false, error: null });
-      return res;
-    } catch (error: any) {
-      const message = typeof error === "string" ? error : error?.message || "Failed to update password.";
-      set({ loading: false, error: message });
+      await changePassword(payload);
+
+      set({
+        loading: false,
+        error: null,
+      });
+
+    } catch (error: unknown) {
+      const message = getErrorMessage(
+        error,
+        "Password update failed."
+      );
+
+      set({
+        loading: false,
+        error: message,
+      });
+
       throw new Error(message);
     }
   },
 
-  resetPassword: async (payload: IPasswordPayload) => {
-    set({ loading: true, error: null });
+  /* =======================================================
+     RESET PASSWORD
+  ======================================================= */
+
+  resetPassword: async (
+    payload: ResetPasswordRequest
+  ) => {
+    set({
+      loading: true,
+      error: null,
+    });
+
     try {
-      const res = await resetPassword(payload);
-      set({ loading: false, error: null });
-      return res;
-    } catch (error: any) {
-      const message = typeof error === "string" ? error : error?.message || "Failed to reset password.";
-      set({ loading: false, error: message });
+      await resetPassword(payload);
+
+      set({
+        loading: false,
+        error: null,
+      });
+
+    } catch (error: unknown) {
+      const message = getErrorMessage(
+        error,
+        "Password reset failed."
+      );
+
+      set({
+        loading: false,
+        error: message,
+      });
+
       throw new Error(message);
     }
   },
 }));
 
-useAuthStore.subscribe((state) => {
-  console.log("👀 AUTH STORE CHANGED:", state.user);
-});
-
 export default useAuthStore;
-
-function changePassword(payload: IPasswordPayload) {
-  throw new Error("Function not implemented.");
-}
-function forgotPassword(payload: IPasswordPayload) {
-  throw new Error("Function not implemented.");
-}
-
-function logoutRequest() {
-  throw new Error("Function not implemented.");
-}
-
-function loginRequest(payload: ILogin): any {
-  throw new Error("Function not implemented.");
-}
-
-function resetPassword(payload: IPasswordPayload) {
-  throw new Error("Function not implemented.");
-}
 

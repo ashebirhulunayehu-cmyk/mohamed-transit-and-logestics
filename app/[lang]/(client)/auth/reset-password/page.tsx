@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Lock, Eye, EyeOff, CheckCircle2, KeyRound } from "lucide-react";
+import { Lock, Eye, EyeOff, CheckCircle2, KeyRound, ArrowLeft } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -58,34 +58,35 @@ export default function ResetPasswordPage() {
       await resetPassword({
         token,
         newPassword: data.password,
-      } as any);
+        confirmPassword: data.confirmPassword,
+      });
       setIsSuccess(true);
       setTimeout(() => {
         router.push(`/${lang}/auth/login`);
       }, 3000);
-    } catch (err: any) {
-      setLocalError(err?.message || (isAm ? "የይለፍ ቃል መቀየር አልተሳካም።" : "Password reset failed."));
+    } catch (err: unknown) {
+      setLocalError(err instanceof Error ? err.message : (isAm ? "የይለፍ ቃል መቀየር አልተሳካም።" : "Password reset failed."));
     }
   };
 
   return (
-    <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 p-8 max-w-md mx-auto">
-      <div className="text-center mb-6">
-        <div className="inline-flex p-3.5 bg-blue-50 text-blue-900 rounded-2xl mb-2 shadow-inner">
-          <KeyRound className="w-8 h-8" />
+    <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-3xl border border-white/30 bg-white/90 shadow-2xl backdrop-blur-xl">
+      <div className="border-b border-slate-100 bg-gradient-to-br from-blue-950 to-indigo-900 px-6 py-8 text-center text-white sm:px-10">
+        <div className="mx-auto mb-4 inline-flex rounded-2xl border border-white/20 bg-white/10 p-3.5 shadow-inner">
+          <KeyRound className="h-8 w-8" />
         </div>
-        <h2 className="text-xl font-extrabold text-gray-800">
+        <h2 className="text-xl font-extrabold">
           {isAm ? "አዲስ የይለፍ ቃል ማስተካከያ" : "Reset Your Password"}
         </h2>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="mt-2 text-xs text-blue-100">
           {isAm ? "እባክዎን አዲሱን የይለፍ ቃልዎን ያስገቡ" : "Enter your new password below"}
         </p>
       </div>
 
       {isSuccess ? (
-        <div className="text-center space-y-4 py-4">
+        <div className="space-y-4 px-6 py-10 text-center sm:px-10">
           <div className="flex justify-center text-green-500">
-            <CheckCircle2 className="w-12 h-12" />
+            <CheckCircle2 className="h-12 w-12" />
           </div>
           <p className="text-xs font-semibold text-gray-700">
             {isAm
@@ -100,13 +101,14 @@ export default function ResetPasswordPage() {
           </Link>
         </div>
       ) : (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 p-6 sm:p-10">
           {(localError || storeError) && (
             <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs text-center font-medium">
               {localError || storeError}
             </div>
           )}
 
+          <div className="grid gap-5 md:grid-cols-2">
           <div>
             <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
               {isAm ? "አዲስ የይለፍ ቃል" : "New Password"}
@@ -153,6 +155,7 @@ export default function ResetPasswordPage() {
               <p className="text-[11px] text-red-500 mt-1">{errors.confirmPassword.message}</p>
             )}
           </div>
+          </div>
 
           <button
             type="submit"
@@ -163,6 +166,16 @@ export default function ResetPasswordPage() {
               ? isAm ? "እየተቀየረ ነው..." : "Updating Password..."
               : isAm ? "የይለፍ ቃል ቀይር" : "Reset Password"}
           </button>
+
+          <div className="border-t border-slate-100 pt-5 text-center">
+            <Link
+              href={`/${lang}/auth/login`}
+              className="inline-flex items-center text-xs font-semibold text-blue-600 transition hover:text-blue-800"
+            >
+              <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+              {isAm ? "ወደ መግቢያ ገጽ ተመለስ" : "Back to Login"}
+            </Link>
+          </div>
         </form>
       )}
     </div>

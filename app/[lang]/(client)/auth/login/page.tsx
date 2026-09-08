@@ -13,8 +13,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 
-import { login } from "@/types/auth.service";
-import { useAuthStore } from "@/store/useAuthStore";
+import useAuthStore from "@/modules/auth/auth.store";
 
 export default function LoginPage() {
   const params = useParams();
@@ -25,31 +24,46 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { login, loading, error: storeError } = useAuthStore();
   const [error, setError] = useState("");
 
-  const extractRole = (dataItem: any): string => {
+  const extractRole = (dataItem: unknown): string => {
+    if (!dataItem || typeof dataItem !== "object") {
+      return "customer";
+    }
+
+    const userData = dataItem as {
+      userRoles?: Array<{ role?: { name?: unknown } }>;
+      roles?: Array<string | { roleName?: unknown; name?: unknown }>;
+      role?: unknown;
+      isSuperAdmin?: unknown;
+    };
+
     // 1. userRoles array ውስጥ ያለውን የ role name መፈለግ
-    const userRoleObj = dataItem?.userRoles?.[0]?.role;
-    if (userRoleObj?.name) {
-      return userRoleObj.name;
+    const userRoleName = userData.userRoles?.[0]?.role?.name;
+    if (typeof userRoleName === "string") {
+      return userRoleName;
     }
 
     // 2. roles array (string or object)
-    if (Array.isArray(dataItem?.roles) && dataItem.roles.length > 0) {
-      const firstRole = dataItem.roles[0];
-      return typeof firstRole === "object"
-        ? firstRole?.roleName || firstRole?.name
-        : firstRole;
+    const firstRole = userData.roles?.[0];
+    if (typeof firstRole === "string") {
+      return firstRole;
+    }
+    if (firstRole && typeof firstRole === "object") {
+      const roleName = firstRole.roleName || firstRole.name;
+      if (typeof roleName === "string") {
+        return roleName;
+      }
     }
 
     // 3. single role string
-    if (typeof dataItem?.role === "string") {
-      return dataItem.role;
+    if (typeof userData.role === "string") {
+      return userData.role;
     }
 
     // 4. isSuperAdmin boolean ከሆነ
-    if (dataItem?.isSuperAdmin) {
+    if (userData.isSuperAdmin === true) {
       return "superadmin";
     }
 
@@ -59,52 +73,16 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    setLoading(true);
     setError("");
 
     try {
-      // Backend የሚፈልገው 'userName' (በካፒታል N)
-      const res: any = await login({
-        userName: email.trim(),
+      await login({
+        username: email.trim(),
         password,
       });
 
-      // Response Structure፡ res -> response -> data -> [0] ወይም res -> data
-      const userObj =
-        res?.response?.data?.[0] ||
-        res?.data?.[0] ||
-        res?.response?.data ||
-        res?.data ||
-        res;
-
-      // Token ፍለጋ (refreshToken, accessToken, ወይም token)
-      const token =
-        userObj?.refreshToken ||
-        userObj?.accessToken ||
-        userObj?.token ||
-        res?.refreshToken ||
-        res?.token;
-
-      if (res?.isSuccess === false || res?.error || !token || !userObj) {
-        throw new Error(
-          res?.message || "ተጠቃሚው አልተገኘም ወይም የተሳሳተ password ነው!"
-        );
-      }
-
+      const userObj = useAuthStore.getState().user;
       const extractedRole = extractRole(userObj).toLowerCase().trim();
-
-      const fullName = [userObj?.firstName, userObj?.lastName]
-        .filter(Boolean)
-        .join(" ");
-
-      const user = {
-        id: String(userObj?.id || "user-1"),
-        name: fullName || userObj?.username || userObj?.userName || email,
-        email: userObj?.email || email,
-        role: extractedRole,
-      };
-
-      useAuthStore.getState().login(user, token);
 
       // --- ROUTING LOGIC ---
       if (
@@ -122,17 +100,15 @@ export default function LoginPage() {
       }
 
       setError(
-        `Your account role "${user.role}" is not configured for this portal.`
+        `Your account role "${extractedRole}" is not configured for this portal.`
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Login Error:", err);
       setError(
-        err?.response?.data?.message ||
-          err?.message ||
+        storeError ||
+          (err instanceof Error ? err.message : "") ||
           "ተጠቃሚው አልተገኘም ወይም የተሳሳተ password ነው!"
       );
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -172,7 +148,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1">
-              <h1 className="text-lg font-bold tracking-wide">Welcome</h1>
+              
             </div>
           </div>
 
@@ -214,7 +190,7 @@ export default function LoginPage() {
                 </label>
 
                 <Link
-                  href={`/${lang}/forgot-password`}
+                  href={`/${lang}/auth/forgot-password`}
                   className="text-xs font-semibold text-blue-600 transition hover:text-blue-800"
                 >
                   Forgot Password?
@@ -273,7 +249,7 @@ export default function LoginPage() {
               <p className="text-xs text-slate-500">
                 New user?{" "}
                 <Link
-                  href={`/${lang}/signup`}
+                  href={`/${lang}/auth/signup`}
                   className="font-semibold text-blue-600 hover:underline"
                 >
                   Sign up

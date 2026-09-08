@@ -58,13 +58,15 @@ export default function CustomerProfilePage() {
       await updatePassword({
         currentPassword: data.currentPassword,
         newPassword: data.newPassword,
-      } as any);
+      });
 
       setIsSuccess(true);
       reset();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setErrorMessage(
-        err?.message || (isAm ? "የይለፍ ቃል መቀየር አልተሳካም።" : "Password update failed.")
+        err instanceof Error
+          ? err.message
+          : (isAm ? "የይለፍ ቃል መቀየር አልተሳካም።" : "Password update failed.")
       );
     }
   };

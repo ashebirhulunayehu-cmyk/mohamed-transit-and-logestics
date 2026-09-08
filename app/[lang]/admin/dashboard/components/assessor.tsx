@@ -2,37 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect } from 'react';
+import { useAssessorStore } from '@/modules/assessor/assessor.store';
 
-const stats = [
-  {
-    title: 'Pending Reviews',
-    value: '18',
-    change: '+4.6%',
-    description: 'Waiting for assessment',
-    icon: 'clock',
-  },
-  {
-    title: 'Approved Cases',
-    value: '42',
-    change: '+12.8%',
-    description: 'Successfully approved',
-    icon: 'check',
-  },
-  {
-    title: 'Rejected Cases',
-    value: '07',
-    change: '-2.4%',
-    description: 'Returned for correction',
-    icon: 'x',
-  },
-  {
-    title: 'Documents',
-    value: '126',
-    change: '+8.2%',
-    description: 'Reviewed this month',
-    icon: 'document',
-  },
-];
+const formatCount = (value: unknown): string => {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? String(numeric) : '0';
+};
 
 const cases = [
   {
@@ -194,13 +170,69 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return null;
 }
 
+const getIssueText = (issue: Record<string, unknown>, key: string, fallback = ''): string => {
+  const value = issue[key];
+  return typeof value === 'string' ? value : typeof value === 'number' ? String(value) : fallback;
+};
+
 export default function AssessorDashboardPage() {
   const pathname = usePathname();
+  const { dashboardData, loading, fetchDashboard, complianceIssues, fetchComplianceIssues } = useAssessorStore();
+
+  useEffect(() => {
+    fetchDashboard();
+    fetchComplianceIssues();
+  }, [fetchDashboard, fetchComplianceIssues]);
 
   const segments = pathname.split('/').filter(Boolean);
   const locale = segments[0] || 'en';
 
   const assessorBase = `/${locale}/assessor`;
+
+  const stats = [
+    {
+      title: 'Pending Customer Approvals',
+      value: formatCount(dashboardData?.pendingCustomerApprovals),
+      change: '+0.0%',
+      description: 'Waiting for approval',
+      icon: 'clock',
+    },
+    {
+      title: 'Pending Service Reviews',
+      value: formatCount(dashboardData?.pendingServiceReviews),
+      change: '+0.0%',
+      description: 'Awaiting review',
+      icon: 'check',
+    },
+    {
+      title: 'Services Under Oversight',
+      value: formatCount(dashboardData?.servicesUnderOversight),
+      change: '+0.0%',
+      description: 'Currently monitored',
+      icon: 'shield',
+    },
+    {
+      title: 'Completed Reviews Today',
+      value: formatCount(dashboardData?.completedReviewsToday),
+      change: '+0.0%',
+      description: 'Closed today',
+      icon: 'document',
+    },
+  ];
+
+  const complianceRows = complianceIssues.length
+    ? complianceIssues.map((issue) => {
+        const record = issue as Record<string, unknown>;
+
+        return {
+          label: getIssueText(record, 'title', getIssueText(record, 'name', 'Compliance issue')),
+          count: getIssueText(record, 'count', getIssueText(record, 'severity', 'Open')),
+          tone: getIssueText(record, 'severity', 'Low').toLowerCase(),
+        };
+      })
+    : [
+        { label: 'No compliance issues', count: '0', tone: 'low' },
+      ];
 
   return (
     <main className="min-h-screen bg-[#f7f8fa] px-4 py-5 sm:px-6 lg:px-8">
@@ -352,23 +384,23 @@ export default function AssessorDashboardPage() {
             </div>
 
             <div className="mt-6 space-y-4">
-              {[
-                ['Document risk', '12', 'bg-red-500', 'w-[72%]'],
-                ['Value risk', '08', 'bg-amber-500', 'w-[48%]'],
-                ['Route risk', '05', 'bg-blue-500', 'w-[32%]'],
-                ['Compliance', '03', 'bg-emerald-500', 'w-[20%]'],
-              ].map(([label, value, color, width]) => (
-                <div key={label}>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-600">{label}</span>
-                    <span className="text-sm font-semibold text-slate-900">{value}</span>
-                  </div>
+              {complianceRows.map(({ label, count, tone }) => {
+                const width = tone === 'high' ? 'w-[72%]' : tone === 'medium' ? 'w-[48%]' : tone === 'low' ? 'w-[20%]' : 'w-[32%]';
+                const color = tone === 'high' ? 'bg-red-500' : tone === 'medium' ? 'bg-amber-500' : tone === 'low' ? 'bg-emerald-500' : 'bg-blue-500';
 
-                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                    <div className={`h-full rounded-full ${color} ${width}`} />
+                return (
+                  <div key={label}>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">{label}</span>
+                      <span className="text-sm font-semibold text-slate-900">{count}</span>
+                    </div>
+
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className={`h-full rounded-full ${color} ${width}`} />
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <Link

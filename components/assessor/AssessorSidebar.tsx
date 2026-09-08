@@ -129,7 +129,7 @@ export default function AssessorSidebar() {
   const handleLogout = async () => {
     await AuthService.logout();
     logout();
-    router.push(`/${lang}/login`);
+    router.push(`/${lang}/auth/login`);
   };
 
   const renderNavItem = (item: {

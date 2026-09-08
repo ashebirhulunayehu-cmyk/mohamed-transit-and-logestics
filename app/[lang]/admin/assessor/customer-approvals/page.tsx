@@ -1,14 +1,14 @@
 "use client";
 
-import { useMemo, useState, use } from "react";
+import { useEffect, useMemo, useState, use } from "react";
 
 import { ApprovalStats } from "@/components/assessor/customer-approvals/ApprovalStats";
 import { ApprovalFilters } from "@/components/assessor/customer-approvals/ApprovalFilters";
 import { ApprovalTable } from "@/components/assessor/customer-approvals/ApprovalTable";
 import { ApprovalDetails } from "@/components/assessor/customer-approvals/ApprovalDetails";
+import { useAssessorStore } from "@/modules/assessor/assessor.store";
 
 import {
-  mockApplicants,
   mockStats,
   type ApprovalApplicant,
   type ApprovalStatus,
@@ -23,13 +23,21 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   const resolvedParams = params ? use(params) : { lang: "en" };
   const currentLang = resolvedParams?.lang || "en";
 
+  const { pendingCustomers, fetchPendingCustomers, approveCustomer } = useAssessorStore();
+
+  useEffect(() => {
+    fetchPendingCustomers();
+  }, [fetchPendingCustomers]);
+
+  const applicants = useMemo<ApprovalApplicant[]>(() => {
+    return (pendingCustomers as unknown as ApprovalApplicant[]) ?? [];
+  }, [pendingCustomers]);
+
   // ------------------------------------------------------------
   // State
   // ------------------------------------------------------------
 
-  const [selectedApplicantId, setSelectedApplicantId] = useState<string>(
-    mockApplicants[0]?.id ?? ""
-  );
+  const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"All" | ApprovalStatus>("All");
@@ -37,18 +45,18 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   // Filter tabs counts
   const counts = useMemo(() => {
     return {
-      all: mockApplicants.length,
-      pending: mockApplicants.filter((a) =>
+      all: applicants.length,
+      pending: applicants.filter((a) =>
         ["pending check", "pending", "in-review"].includes(a.status.toLowerCase())
       ).length,
-      flagged: mockApplicants.filter((a) =>
+      flagged: applicants.filter((a) =>
         ["flagged", "returned for revision"].includes(a.status.toLowerCase())
       ).length,
-      approved: mockApplicants.filter((a) =>
+      approved: applicants.filter((a) =>
         ["verified", "approved"].includes(a.status.toLowerCase())
       ).length,
     };
-  }, []);
+  }, [applicants]);
 
   // ------------------------------------------------------------
   // Filter applicants
@@ -57,7 +65,7 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   const filteredApplicants = useMemo(() => {
     const searchValue = search.toLowerCase().trim();
 
-    return mockApplicants.filter((applicant: ApprovalApplicant) => {
+    return applicants.filter((applicant: ApprovalApplicant) => {
       const matchesSearch =
         searchValue === "" ||
         applicant.name.toLowerCase().includes(searchValue) ||
@@ -69,7 +77,7 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
 
       return matchesSearch && matchesStatus;
     });
-  }, [search, status]);
+  }, [applicants, search, status]);
 
   // ------------------------------------------------------------
   // Active Selected Applicant
@@ -86,10 +94,16 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   // Decision Handlers
   // ------------------------------------------------------------
 
-  const handleApprove = (id?: string, note?: string) => {
-    console.log("Approve importer:", {
-      id: id || selectedApplicantId,
-      note,
+  const handleApprove = async (id?: string, note?: string) => {
+    const customerId = Number(id || selectedApplicantId);
+    if (!Number.isInteger(customerId)) {
+      return;
+    }
+
+    await approveCustomer({
+      customerId,
+      isApproved: true,
+      notes: note?.trim() || null,
     });
   };
 
@@ -236,7 +250,7 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
           </span>
 
           <span>
-            Showing {filteredApplicants.length} of {mockApplicants.length} applicants
+            Showing {filteredApplicants.length} of {applicants.length} applicants
           </span>
         </div>
       </div>

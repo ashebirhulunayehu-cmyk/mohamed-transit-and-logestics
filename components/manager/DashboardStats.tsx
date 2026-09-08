@@ -12,7 +12,12 @@ interface DashboardStat {
 }
 
 interface ManagerDashboardStatCardsProps {
-  stats: any; // From store
+  stats?: {
+    activeCases?: number;
+    pendingApproval?: number;
+    overdueCases?: number;
+    completedCases?: number;
+  } | null;
 }
 
 export const ManagerDashboardStatCards: React.FC<ManagerDashboardStatCardsProps> = ({ stats }) => {

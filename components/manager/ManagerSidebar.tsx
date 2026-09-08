@@ -74,7 +74,7 @@ export default function ManagerSidebar() {
   const handleLogout = async () => {
     await AuthService.logout();
     logout();
-    router.push(`/${lang}/login`);
+    router.push(`/${lang}/auth/login`);
   };
 
   const renderNavItem = (item: { label: string; href: string; icon: React.ElementType; badge?: string | null }) => {

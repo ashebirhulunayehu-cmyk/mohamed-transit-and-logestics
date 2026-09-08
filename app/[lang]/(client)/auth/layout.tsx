@@ -12,7 +12,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
       <div className="absolute bottom-1/4 -right-20 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Content Container */}
-      <main className="relative w-full max-w-md z-10">
+      <main className="relative z-10 w-full max-w-6xl">
         {children}
       </main>
     </div>

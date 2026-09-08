@@ -1,4 +1,4 @@
-import axiosInstance from "@/modules/utils/axios";
+import { loginUser } from "@/modules/auth/auth.endpoint";
 
 // 1. Backend የሚቀበለው key name 'userName' (በካፒታል N) ነው
 export interface LoginRequest {
@@ -55,10 +55,5 @@ export interface LoginResponse {
 
 // 3. Login API Call Function
 export const login = async (data: LoginRequest): Promise<LoginResponse> => {
-  const response = await axiosInstance.post<LoginResponse>(
-    "/v1/User/Login",
-    data
-  );
-
-  return response.data as LoginResponse;
+  return loginUser(data) as Promise<LoginResponse>;
 };

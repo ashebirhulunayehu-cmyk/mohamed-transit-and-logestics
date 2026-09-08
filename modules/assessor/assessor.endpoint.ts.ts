@@ -1,35 +1,36 @@
 import { service } from "../utils/axios/service";
+import { API_ROUTES } from "@/modules/api";
 
 export const AssessorEndpoints = {
   // 1. Pending Customer Approvals
-  getPendingCustomerApprovals: (params?: Record<string, any>) =>
-    service.get('/v1/Assessor/GetPendingCustomerApprovals', { params }),
+  getPendingCustomerApprovals: (params?: Record<string, unknown>) =>
+    service.get(API_ROUTES.assessor.getPendingCustomerApprovals, { params }),
 
   // 2. Approve Customer
-  approveCustomer: (data: { customerId: string; isApproved: boolean; remark?: string }) =>
-    service.put('/v1/Assessor/ApproveCustomer', data),
+  approveCustomer: (data: { customerId: number; isApproved: boolean; notes: string | null }) =>
+    service.put(API_ROUTES.assessor.approveCustomer, data),
 
   // 3. Pending Service Reviews
-  getPendingServiceReviews: (params?: Record<string, any>) =>
-    service.get('/v1/Assessor/GetPendingServiceReviews', { params }),
+  getPendingServiceReviews: (params?: Record<string, unknown>) =>
+    service.get(API_ROUTES.assessor.getPendingServiceReviews, { params }),
 
   // 4. Review Service
   reviewService: (data: { serviceId: string; status: number; feedback?: string }) =>
-    service.put('/v1/Assessor/ReviewService', data),
+    service.put(API_ROUTES.assessor.reviewService, data),
 
   // 5. Services Under Oversight
-  getServicesUnderOversight: (params?: Record<string, any>) =>
-    service.get('/v1/Assessor/GetServicesUnderOversight', { params }),
+  getServicesUnderOversight: (params?: Record<string, unknown>) =>
+    service.get(API_ROUTES.assessor.getServicesUnderOversight, { params }),
 
   // 6. Add Compliance Feedback
   addComplianceFeedback: (data: { serviceId: string; comment: string; issueType?: string }) =>
-    service.post('/v1/Assessor/AddComplianceFeedback', data),
+    service.post(API_ROUTES.assessor.addComplianceFeedback, data),
 
   // 7. Dashboard Stats
   getDashboard: () =>
-    service.get('/v1/Assessor/GetDashboard'),
+    service.get(API_ROUTES.assessor.getDashboard),
 
   // 8. Compliance Issues
-  getComplianceIssues: (params?: Record<string, any>) =>
-    service.get('/v1/Assessor/GetComplianceIssues', { params }),
+  getComplianceIssues: (params?: Record<string, unknown>) =>
+    service.get(API_ROUTES.assessor.getComplianceIssues, { params }),
 };

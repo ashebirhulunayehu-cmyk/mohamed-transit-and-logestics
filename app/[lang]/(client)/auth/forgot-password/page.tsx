@@ -41,12 +41,11 @@ export default function ForgotPasswordPage() {
     try {
       await forgotPassword({
         email: data.email,
-        newPassword: ''
       });
       setIsSuccess(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLocalError(
-        err?.message || (isAm ? 'ጥያቄው አልተሳካም።' : 'Request failed.')
+        err instanceof Error ? err.message : (isAm ? 'ጥያቄው አልተሳካም።' : 'Request failed.')
       );
     }
   };

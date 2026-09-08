@@ -17,7 +17,8 @@ export function middleware(req: NextRequest) {
                      pathname.includes("/auth/forgot-password");
 
   // 4. Protected Routes Check
-  const isProtectedPage = pathname.includes("/customer") || 
+  const isProtectedPage = pathname.includes("/customer/") ||
+                          pathname.endsWith("/customer") ||
                           pathname.includes("/request-service");
 
   // Unauthenticated user ወደ Protected page ሲሄድ ወደ Login መመለስ
