@@ -13,7 +13,7 @@ interface AssessorState {
   pendingServices: AssessorItem[];
   servicesUnderOversight: AssessorItem[];
   complianceIssues: AssessorItem[];
-  dashboardData: AssessorItem | null;
+  dashboardData: AssessorDashboardSummary | null;
   loading: boolean;
   error: string | null;
 
@@ -105,7 +105,7 @@ export const useAssessorStore = create<AssessorState>((set, get) => ({
       const payload = unwrapApiData(response);
 
       const dashboardItem = isRecord(payload)
-        ? (payload as AssessorDashboardSummary & AssessorItem)
+        ? (payload as unknown as AssessorDashboardSummary)
         : null;
 
       set({

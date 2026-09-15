@@ -4,50 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAssessorStore } from '@/modules/assessor/assessor.store';
+import type { RecentCustomerApproval } from '@/modules/assessor/assessor.type';
 
 const formatCount = (value: unknown): string => {
   const numeric = Number(value ?? 0);
   return Number.isFinite(numeric) ? String(numeric) : '0';
 };
-
-const cases = [
-  {
-    id: 'MTG-2026-00128',
-    importer: 'ABC Import & Export PLC',
-    service: 'Commercial Import',
-    mode: 'Multimodal',
-    risk: 'Medium',
-    status: 'Pending Review',
-    updated: '8 min ago',
-  },
-  {
-    id: 'MTG-2026-00124',
-    importer: 'Ethiopian Trading House',
-    service: 'Vehicle Import',
-    mode: 'Unimodal',
-    risk: 'Low',
-    status: 'Pending Review',
-    updated: '24 min ago',
-  },
-  {
-    id: 'MTG-2026-00119',
-    importer: 'Blue Nile General Trading',
-    service: 'General Cargo',
-    mode: 'Multimodal',
-    risk: 'High',
-    status: 'Escalated',
-    updated: '42 min ago',
-  },
-  {
-    id: 'MTG-2026-00115',
-    importer: 'East Africa Logistics',
-    service: 'Container Import',
-    mode: 'Multimodal',
-    risk: 'Low',
-    status: 'Approved',
-    updated: '1 hr ago',
-  },
-];
 
 const activities = [
   {
@@ -175,9 +137,21 @@ const getIssueText = (issue: Record<string, unknown>, key: string, fallback = ''
   return typeof value === 'string' ? value : typeof value === 'number' ? String(value) : fallback;
 };
 
+const formatDate = (value?: string | null): string => {
+  if (!value) return 'Date unavailable';
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Date unavailable'
+    : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+};
+
+const getApprovalStatus = (approval: RecentCustomerApproval): string =>
+  approval.isVerified ? 'Verified' : 'Pending Review';
+
 export default function AssessorDashboardPage() {
   const pathname = usePathname();
-  const { dashboardData, loading, fetchDashboard, complianceIssues, fetchComplianceIssues } = useAssessorStore();
+  const { dashboardData, fetchDashboard, complianceIssues, fetchComplianceIssues } = useAssessorStore();
 
   useEffect(() => {
     fetchDashboard();
@@ -230,9 +204,27 @@ export default function AssessorDashboardPage() {
           tone: getIssueText(record, 'severity', 'Low').toLowerCase(),
         };
       })
-    : [
-        { label: 'No compliance issues', count: '0', tone: 'low' },
-      ];
+    : [];
+
+  const recentApprovals = dashboardData?.recentCustomerApprovals ?? [];
+  const firstComplianceIssue = complianceIssues[0] as Record<string, unknown> | undefined;
+  const flaggedCaseId = firstComplianceIssue
+    ? firstComplianceIssue.caseId ?? firstComplianceIssue.serviceId ?? firstComplianceIssue.id
+    : undefined;
+  const pendingCustomerApprovals = dashboardData?.pendingCustomerApprovals ?? 0;
+  const pendingServiceReviews = dashboardData?.pendingServiceReviews ?? 0;
+  const servicesUnderOversight = dashboardData?.servicesUnderOversight ?? 0;
+  const completedReviewsToday = dashboardData?.completedReviewsToday ?? 0;
+  const reviewTotal = pendingServiceReviews + completedReviewsToday;
+  const completionPercentage = reviewTotal
+    ? Math.round((completedReviewsToday / reviewTotal) * 100)
+    : null;
+  const workflowMetrics = [
+    ['Customer approvals', pendingCustomerApprovals],
+    ['Service reviews', pendingServiceReviews],
+    ['Under oversight', servicesUnderOversight],
+    ['Completed today', completedReviewsToday],
+  ];
 
   return (
     <main className="min-h-screen bg-[#f7f8fa] px-4 py-5 sm:px-6 lg:px-8">
@@ -326,33 +318,33 @@ export default function AssessorDashboardPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Current cases across the import service lifecycle.
+                  Live assessment workload from the assessor dashboard.
                 </p>
               </div>
 
               <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
-                12 stages
+                Live data
               </span>
             </div>
 
             <div className="mt-7">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-700">Overall completion</span>
-                <span className="font-semibold text-slate-950">68%</span>
+                <span className="font-medium text-slate-700">Review completion today</span>
+                <span className="font-semibold text-slate-950">
+                  {completionPercentage === null ? 'N/A' : `${completionPercentage}%`}
+                </span>
               </div>
 
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full w-[68%] rounded-full bg-slate-900" />
+                <div
+                  className="h-full rounded-full bg-slate-900 transition-[width]"
+                  style={{ width: `${completionPercentage ?? 0}%` }}
+                />
               </div>
             </div>
 
             <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                ['Submitted', '24'],
-                ['Under Review', '18'],
-                ['Approved', '42'],
-                ['Escalated', '07'],
-              ].map(([label, value]) => (
+              {workflowMetrics.map(([label, value]) => (
                 <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
                   <p className="text-xs text-slate-500">{label}</p>
                   <p className="mt-1 text-xl font-semibold text-slate-950">{value}</p>
@@ -384,7 +376,7 @@ export default function AssessorDashboardPage() {
             </div>
 
             <div className="mt-6 space-y-4">
-              {complianceRows.map(({ label, count, tone }) => {
+              {complianceRows.length ? complianceRows.map(({ label, count, tone }) => {
                 const width = tone === 'high' ? 'w-[72%]' : tone === 'medium' ? 'w-[48%]' : tone === 'low' ? 'w-[20%]' : 'w-[32%]';
                 const color = tone === 'high' ? 'bg-red-500' : tone === 'medium' ? 'bg-amber-500' : tone === 'low' ? 'bg-emerald-500' : 'bg-blue-500';
 
@@ -400,16 +392,23 @@ export default function AssessorDashboardPage() {
                     </div>
                   </div>
                 );
-              })}
+              }) : (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
+                  <p className="text-sm font-medium text-slate-600">No active compliance issues</p>
+                  <p className="mt-1 text-xs text-slate-400">The latest compliance check returned no records.</p>
+                </div>
+              )}
             </div>
 
-            <Link
-              href={`${assessorBase}/case-review/MTG-2026-00119`}
-              className="mt-6 flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              View flagged case
-              <Icon name="arrow" size={17} />
-            </Link>
+            {flaggedCaseId !== undefined && (
+              <Link
+                href={`${assessorBase}/case-review/${flaggedCaseId}`}
+                className="mt-6 flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                View flagged case
+                <Icon name="arrow" size={17} />
+              </Link>
+            )}
           </div>
         </section>
 
@@ -425,7 +424,7 @@ export default function AssessorDashboardPage() {
                   </p>
 
                   <h2 className="mt-1 text-lg font-semibold text-slate-950">
-                    Recent cases
+                    Recent customer approvals
                   </h2>
                 </div>
 
@@ -438,12 +437,9 @@ export default function AssessorDashboardPage() {
                     />
                   </div>
 
-                  <Link
-                    href={`${assessorBase}/case-review/MTG-2026-00128`}
-                    className="hidden rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 sm:block"
-                  >
-                    View all
-                  </Link>
+                  <span className="text-xs font-medium text-slate-400">
+                    {recentApprovals.length} record{recentApprovals.length === 1 ? '' : 's'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -462,64 +458,51 @@ export default function AssessorDashboardPage() {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {cases.map((item) => (
-                    <tr key={item.id} className="transition hover:bg-slate-50/70">
+                  {recentApprovals.length ? recentApprovals.map((item) => {
+                    const status = getApprovalStatus(item);
+
+                    return (
+                    <tr key={item.id ?? item.businessName} className="transition hover:bg-slate-50/70">
                       <td className="px-6 py-4">
-                        <p className="text-sm font-semibold text-slate-900">{item.id}</p>
-                        <p className="mt-0.5 text-xs text-slate-400">{item.updated}</p>
+                        <p className="text-sm font-semibold text-slate-900">{item.businessName || 'Unnamed business'}</p>
+                        <p className="mt-0.5 text-xs text-slate-400">Verified {formatDate(item.verifiedAt)}</p>
                       </td>
 
                       <td className="px-6 py-4">
-                        <p className="max-w-[190px] truncate text-sm font-medium text-slate-700">
-                          {item.importer}
-                        </p>
-                        <p className="mt-0.5 text-xs text-slate-400">{item.service}</p>
+                        <p className="max-w-[190px] truncate text-sm font-medium text-slate-700">{item.contactPerson || 'No contact person'}</p>
+                        <p className="mt-0.5 text-xs text-slate-400">{item.contactEmail || 'No email provided'}</p>
                       </td>
 
                       <td className="px-6 py-4">
                         <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                          {item.mode}
+                          {item.businessType || 'Business'}
                         </span>
                       </td>
 
                       <td className="px-6 py-4">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            item.risk === 'High'
-                              ? 'bg-red-50 text-red-700'
-                              : item.risk === 'Medium'
-                              ? 'bg-amber-50 text-amber-700'
-                              : 'bg-emerald-50 text-emerald-700'
-                          }`}
-                        >
-                          {item.risk}
-                        </span>
+                        <span className="text-sm text-slate-600">TIN {item.tinNumber || 'Unavailable'}</span>
                       </td>
 
                       <td className="px-6 py-4">
                         <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            item.status === 'Approved'
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : item.status === 'Escalated'
-                              ? 'bg-red-50 text-red-700'
-                              : 'bg-blue-50 text-blue-700'
-                          }`}
+                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status === 'Verified' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}
                         >
-                          {item.status}
+                          {status}
                         </span>
                       </td>
 
                       <td className="px-6 py-4 text-right">
-                        <Link
-                          href={`${assessorBase}/case-review/${item.id}`}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900"
-                        >
-                          <Icon name="chevron" size={18} />
-                        </Link>
+                        <span className="text-xs text-slate-400">{item.city || item.state || 'Location unavailable'}</span>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center text-sm text-slate-500">
+                        No recent customer approvals returned by the API.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

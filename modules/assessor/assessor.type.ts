@@ -15,8 +15,25 @@ export interface AssessorDashboardSummary {
   pendingServiceReviews: number;
   servicesUnderOversight: number;
   completedReviewsToday: number;
-  recentCustomerApprovals: unknown[];
+  recentCustomerApprovals: RecentCustomerApproval[];
   recentServiceReviews: unknown[];
+}
+
+export interface RecentCustomerApproval {
+  id?: string | number;
+  businessName?: string;
+  tinNumber?: string;
+  businessLicense?: string;
+  businessAddress?: string;
+  city?: string;
+  state?: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  businessType?: string;
+  isVerified?: boolean;
+  verifiedAt?: string | null;
+  recordStatus?: number;
 }
 
 export interface AssessorComplianceIssue {

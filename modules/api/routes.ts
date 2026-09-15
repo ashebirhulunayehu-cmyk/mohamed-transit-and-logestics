@@ -1,7 +1,6 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5254/api/v1";
 
 export const API_ROUTES = {
-  test: "/Test",
   auth: {
     user: {
       create: "/User/Create",
@@ -47,17 +46,17 @@ export const API_ROUTES = {
     downloadDocuments: "/Document/DownloadDocuments",
   },
   shipment: {
-    create: "/Shipments/Create",
-    assign: "/Shipments/Assign",
-    createStageTransport: "/Shipments/CreateStageTransport",
-    updateStatus: (id: string | number) => `/Shipments/UpdateStatus/${id}`,
-    updateServiceStage: "/Shipments/UpdateServiceStage",
-    updateStageTransport: "/Shipments/UpdateStageTransport",
-    uploadDocument: "/Shipments/UploadDocument",
-    getAll: "/Shipments/GetAll",
-    getById: (id: string | number) => `/Shipments/GetById/${id}`,
-    getByImporter: (importerId: string | number) => `/Shipments/GetByImporter/${importerId}`,
-    delete: (id: string | number) => `/Shipments/Delete/${id}`,
+    create: "/Shipment/Create",
+    assign: "/Shipment/Assign",
+    createStageTransport: "/Shipment/CreateStageTransport",
+    updateStatus: (id: string | number) => `/Shipment/UpdateStatus/${id}`,
+    updateServiceStage: "/Shipment/UpdateServiceStage",
+    updateStageTransport: "/Shipment/UpdateStageTransport",
+    uploadDocument: "/Shipment/UploadDocument",
+    getAll: "/Shipment/GetAll",
+    getById: (id: string | number) => `/Shipment/GetById/${id}`,
+    getByImporter: (importerId: string | number) => `/Shipment/GetByImporter/${importerId}`,
+    delete: (id: string | number) => `/Shipment/Delete/${id}`,
   },
 } as const;
 
