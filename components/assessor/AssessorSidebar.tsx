@@ -76,6 +76,24 @@ const accountItems = [
   },
 ];
 
+const caseExecutorItems = [
+  {
+    label: "Assigned Services",
+    href: "/admin/case-Executer#assigned-service",
+    icon: BriefcaseBusiness,
+  },
+  {
+    label: "Today's Tasks",
+    href: "/admin/case-Executer#todays-tasks",
+    icon: ClipboardCheck,
+  },
+  {
+    label: "Urgent Notifications",
+    href: "/admin/case-Executer#urgent-notifications",
+    icon: Bell,
+  },
+];
+
 const roles: {
   value: PrototypeRole;
   label: string;
@@ -110,11 +128,19 @@ export default function AssessorSidebar() {
 
   const {
     sidebarCollapsed,
+    mobileSidebarOpen,
+    closeMobileSidebar,
     selectedRole,
     setSelectedRole,
   } = useAssessorStore();
 
   const { logout } = useAuthStore();
+  const activeRole = pathname.includes("/admin/case-Executer")
+    ? "case_executor"
+    : selectedRole;
+  const dashboardHref = activeRole === "case_executor"
+    ? "/admin/case-Executer"
+    : "/admin/dashboard";
 
   const [roleOpen, setRoleOpen] = useState(false);
 
@@ -145,6 +171,7 @@ export default function AssessorSidebar() {
       <Link
         key={item.href}
         href={fullHref}
+        onClick={closeMobileSidebar}
         title={sidebarCollapsed ? item.label : undefined}
         className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
           active
@@ -169,15 +196,22 @@ export default function AssessorSidebar() {
   };
 
   return (
-    <aside
-      className={`fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-slate-200 bg-white transition-all duration-300 ${
-        sidebarCollapsed ? "w-[76px]" : "w-[270px]"
-      }`}
-    >
+    <>
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={closeMobileSidebar}
+          className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden"
+        />
+      )}
+      <aside
+        className={`fixed left-0 top-0 z-40 flex h-dvh w-[270px] flex-col border-r border-slate-200 bg-white transition-all duration-300 lg:h-screen ${sidebarCollapsed ? "lg:w-[76px]" : "lg:w-[270px]"} ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
+      >
       {/* Brand */}
       <div className="flex h-[76px] items-center border-b border-slate-200 px-4">
         <Link
-          href={`/${lang}/admin/dashboard`}
+          href={`/${lang}${dashboardHref}`}
           className="flex min-w-0 items-center gap-3"
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
@@ -191,7 +225,7 @@ export default function AssessorSidebar() {
               </p>
 
               <p className="text-xs text-slate-500">
-                Assessment Portal
+                {activeRole === "case_executor" ? "Case Operations" : "Assessment Portal"}
               </p>
             </div>
           )}
@@ -210,49 +244,61 @@ export default function AssessorSidebar() {
 
           {renderNavItem({
             label: "Dashboard",
-            href: "/admin/dashboard",
+            href: dashboardHref,
             icon: LayoutDashboard,
           })}
         </div>
 
-        {/* Assessment */}
-        <div className="mb-6">
-          {!sidebarCollapsed && (
-            <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Assessment
-            </p>
-          )}
-
-          <div className="space-y-1">
-            {assessmentItems.map(renderNavItem)}
+        {activeRole === "case_executor" ? (
+          <div className="mb-6">
+            {!sidebarCollapsed && (
+              <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Case Execution
+              </p>
+            )}
+            <div className="space-y-1">
+              {caseExecutorItems.map(renderNavItem)}
+            </div>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="mb-6">
+              {!sidebarCollapsed && (
+                <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Assessment
+                </p>
+              )}
+              <div className="space-y-1">
+                {assessmentItems.map(renderNavItem)}
+              </div>
+            </div>
 
-        {/* Communication */}
-        <div className="mb-6">
-          {!sidebarCollapsed && (
-            <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Communication
-            </p>
-          )}
-
-          <div className="space-y-1">
-            {communicationItems.map(renderNavItem)}
-          </div>
-        </div>
+            <div className="mb-6">
+              {!sidebarCollapsed && (
+                <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Communication
+                </p>
+              )}
+              <div className="space-y-1">
+                {communicationItems.map(renderNavItem)}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Account */}
-        <div>
-          {!sidebarCollapsed && (
-            <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Account
-            </p>
-          )}
-
-          <div className="space-y-1">
-            {accountItems.map(renderNavItem)}
+        {activeRole !== "case_executor" && (
+          <div>
+            {!sidebarCollapsed && (
+              <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Account
+              </p>
+            )}
+            <div className="space-y-1">
+              {accountItems.map(renderNavItem)}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Role Selector and Sign out */}
@@ -264,7 +310,7 @@ export default function AssessorSidebar() {
             onClick={() => setRoleOpen((open) => !open)}
             title={sidebarCollapsed ? "Prototype role" : undefined}
             className={`flex w-full items-center rounded-xl border border-slate-200 bg-slate-50 p-2.5 transition hover:bg-slate-100 ${
-              sidebarCollapsed ? "justify-center" : "justify-between"
+                  sidebarCollapsed ? "justify-center" : "justify-between"
             }`}
           >
             <div className="flex min-w-0 items-center gap-2.5">
@@ -274,7 +320,7 @@ export default function AssessorSidebar() {
                     Prototype Role
                   </p>
                   <p className="truncate text-sm font-bold text-slate-900">
-                    {roles.find((role) => role.value === selectedRole)?.label || "Assessor"}
+                    {roles.find((role) => role.value === activeRole)?.label || "Assessor"}
                   </p>
                 </div>
               )}
@@ -298,7 +344,7 @@ export default function AssessorSidebar() {
 
               <div className="py-1 space-y-0.5">
                 {roles.map((role) => {
-                  const selected = selectedRole === role.value;
+                  const selected = activeRole === role.value;
 
                   return (
                     <button
@@ -307,6 +353,9 @@ export default function AssessorSidebar() {
                       onClick={() => {
                         setSelectedRole(role.value);
                         setRoleOpen(false);
+                        if (role.value === "case_executor") {
+                          router.push(`/${lang}/admin/case-Executer`);
+                        }
                       }}
                       className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
                         selected
@@ -338,6 +387,7 @@ export default function AssessorSidebar() {
           )}
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

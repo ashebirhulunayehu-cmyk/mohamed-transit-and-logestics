@@ -28,6 +28,7 @@ export interface AssessorFilters {
 
 export interface AssessorState {
   sidebarCollapsed: boolean;
+  mobileSidebarOpen: boolean;
   selectedRole: AssessorRole;
   selectedCase: Case | null;
   filters: AssessorFilters;
@@ -36,6 +37,8 @@ export interface AssessorState {
   confirmationAction: "approve" | "reject" | "correction" | null;
 
   toggleSidebar: () => void;
+  toggleMobileSidebar: () => void;
+  closeMobileSidebar: () => void;
   setSelectedRole: (role: AssessorRole) => void;
   setSelectedCase: (caseData: Case | null) => void;
   setFilters: (filters: Partial<AssessorFilters>) => void;
@@ -55,6 +58,7 @@ const initialFilters: AssessorFilters = {
 
 export const useAssessorStore = create<AssessorState>((set) => ({
   sidebarCollapsed: false,
+  mobileSidebarOpen: false,
   selectedRole: "assessor",
   selectedCase: null,
   filters: initialFilters,
@@ -66,6 +70,9 @@ export const useAssessorStore = create<AssessorState>((set) => ({
     set((state) => ({
       sidebarCollapsed: !state.sidebarCollapsed,
     })),
+  toggleMobileSidebar: () =>
+    set((state) => ({ mobileSidebarOpen: !state.mobileSidebarOpen })),
+  closeMobileSidebar: () => set({ mobileSidebarOpen: false }),
 
   setSelectedRole: (role: AssessorRole) =>
     set({

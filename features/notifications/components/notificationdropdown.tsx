@@ -10,8 +10,7 @@ interface NotificationDropdownProps {
 }
 
 export default function NotificationDropdown({ onClose }: NotificationDropdownProps) {
-  const { notifications, markAsRead } = useNotificationStore();
-  const unreadCount = notifications.filter((n: NotificationItem) => !n.isRead).length;
+  const { notifications, unreadCount, markAsRead } = useNotificationStore();
 
   return (
     <div className="absolute right-0 mt-3 w-96 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">

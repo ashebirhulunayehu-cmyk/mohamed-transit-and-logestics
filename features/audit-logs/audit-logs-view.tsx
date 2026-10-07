@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuditStore } from './audit-logs-store';
-import { Search, Command, ShieldCheck, AlertCircle, Clock } from 'lucide-react';
+import { Search, ShieldCheck, AlertCircle, Clock } from 'lucide-react';
 
 const filterTabs = [
   { label: 'All', value: 'ALL' },
@@ -14,14 +14,26 @@ const filterTabs = [
 ];
 
 export const AuditLogsView = () => {
-  const { logs, searchQuery, selectedFilter, setSearchQuery, setSelectedFilter } = useAuditStore();
+  const {
+    logs,
+    loading,
+    error,
+    searchQuery,
+    selectedFilter,
+    fetchLogs,
+    setSearchQuery,
+    setSelectedFilter,
+  } = useAuditStore();
 
-  // Filter & Search Logic
+  useEffect(() => {
+    void fetchLogs();
+  }, [fetchLogs]);
+
   const filteredLogs = logs.filter((log) => {
     const matchesSearch =
-      log.reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.description.toLowerCase().includes(searchQuery.toLowerCase());
+      log.reference.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+      log.type.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+      log.description.toLowerCase().includes(searchQuery.trim().toLowerCase());
 
     const matchesTab = selectedFilter === 'ALL' || log.type === selectedFilter;
 
@@ -36,6 +48,15 @@ export const AuditLogsView = () => {
         <h2 className="text-2xl font-bold text-slate-900 mt-0.5">Assessment logs</h2>
         <p className="text-sm text-slate-500 mt-1">Every approval, rejection and revision you have recorded.</p>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+        >
+          {error}
+        </div>
+      )}
 
       {/* 2. Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -101,7 +122,11 @@ export const AuditLogsView = () => {
 
       {/* 4. Logs List Container */}
       <div className="space-y-3">
-        {filteredLogs.length > 0 ? (
+        {loading && logs.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
+            Loading assessment logs...
+          </div>
+        ) : filteredLogs.length > 0 ? (
           filteredLogs.map((log) => (
             <div
               key={log.id}

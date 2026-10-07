@@ -33,6 +33,7 @@ export interface ManagerStats {
 
 export interface ManagerState {
   sidebarCollapsed: boolean;
+  mobileSidebarOpen: boolean;
   selectedRole: ManagerRole;
   selectedCase: CaseMetrics | null;
   filters: ManagerFilters;
@@ -42,6 +43,8 @@ export interface ManagerState {
   stats: ManagerStats;
 
   toggleSidebar: () => void;
+  toggleMobileSidebar: () => void;
+  closeMobileSidebar: () => void;
   setSelectedRole: (role: ManagerRole) => void;
   setSelectedCase: (caseData: CaseMetrics | null) => void;
   setFilters: (filters: Partial<ManagerFilters>) => void;
@@ -72,6 +75,7 @@ const initialStats: ManagerStats = {
 
 export const useManagerStore = create<ManagerState>((set) => ({
   sidebarCollapsed: false,
+  mobileSidebarOpen: false,
   selectedRole: "manager",
   selectedCase: null,
   filters: initialFilters,
@@ -84,6 +88,9 @@ export const useManagerStore = create<ManagerState>((set) => ({
     set((state) => ({
       sidebarCollapsed: !state.sidebarCollapsed,
     })),
+  toggleMobileSidebar: () =>
+    set((state) => ({ mobileSidebarOpen: !state.mobileSidebarOpen })),
+  closeMobileSidebar: () => set({ mobileSidebarOpen: false }),
 
   setSelectedRole: (role: ManagerRole) =>
     set({

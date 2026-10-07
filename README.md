@@ -20,6 +20,46 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Customer sidebar summary
+
+The customer layout loads its counters from `/api/customer/sidebar-summary`. The route
+requires an `accessToken` cookie and forwards it to the backend. Set
+`BACKEND_API_URL` to the backend API root (defaults to `http://localhost:5254/api/v1`).
+Set `CUSTOMER_SIDEBAR_USER_ID` to the authenticated importer's numeric user ID; local
+development defaults to the provided simulation account ID `3`, while other
+environments must configure the ID explicitly. The route normalizes SQLite `0`/`1`
+flags into booleans and returns an error instead of fabricated counts if a backend
+request fails.
+
+## Customer dashboard backend routes
+
+The customer home page redirects to `/[lang]/customer/dashboard`, which provides
+shipment, tax-record, document, and support-request views. Authenticated API
+proxies forward shipment reads to `/Customer/GetMyServices`, document reads to
+`/Document/GetServiceDocuments` (with a `serviceId` query parameter), and
+downloads to `/Document/DownloadDocument?documentId=...`. Tax records are loaded
+from `/TaxRecords/GetByCustomer/{customerUserId}` by `/api/customer/tax`; the
+proxy normalizes numeric status codes `0` and `1` to `Unpaid` and `Paid`. In
+development the customer ID defaults to `3`; configure `CUSTOMER_SIDEBAR_USER_ID`
+explicitly in other environments.
+
+`/api/customer/support` forwards GET requests to `/SupportRequests/GetMine` and
+validated POST requests to `/SupportRequests/Create`. Ticket creation accepts
+`subject`, `description`, and priority `Low`, `Medium`, or `High`; the proxy sets
+`status` to `Pending`. All proxy reads bypass caches and forward the authenticated
+access token. The payment dialog is a preview only; it does not charge or mark a
+tax assessment paid.
+
+The workflow verifies the importer profile through `/Customer/GetProfile`
+before loading customer records. Shipment data comes from
+`/Shipments/GetByImporter/{customerUserId}`; stage executions use
+`/stages/executions/customer/{customerUserId}`. The proxy maps SQLite-style
+`IsVerified`, `IsBlocked`, and `RequiresCustomerAction` flags to JSON booleans,
+and the dashboard renders actual stage executions and their issue descriptions.
+For the local simulation account, `CUSTOMER_SIDEBAR_USER_ID` defaults to `3` in
+development. Non-development deployments must configure the authenticated
+importer's ID.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

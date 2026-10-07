@@ -3,7 +3,7 @@ import { AuditLogsView } from '@/features/audit-logs/audit-logs-view';
 
 export default function AssessmentLogsPage() {
   return (
-    <main className="p-8 max-w-6xl w-full mx-auto min-h-screen bg-slate-50">
+    <main className="w-full max-w-6xl mx-auto min-h-screen bg-slate-50">
       <AuditLogsView />
     </main>
   );

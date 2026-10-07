@@ -1,8 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { mockServiceCases } from "@/features/service-reviews/serviceReview.data";
+import { useServiceReviewStore } from "@/features/service-reviews/serviceReview.store";
 import {
   ArrowLeft,
   Check,
@@ -19,7 +19,36 @@ export default function SingleServiceCasePage() {
   const router = useRouter();
   const caseId = params.id as string;
 
-  const currentCase = mockServiceCases.find((c) => c.id === caseId) || mockServiceCases[0];
+  const currentCase = useServiceReviewStore((state) =>
+    state.cases.find((serviceCase) => serviceCase.id === caseId)
+  );
+  const fetchCases = useServiceReviewStore((state) => state.fetchCases);
+  const loading = useServiceReviewStore((state) => state.loading);
+  const error = useServiceReviewStore((state) => state.error);
+  const reviewedService = useServiceReviewStore((state) => state.reviewedService);
+
+  useEffect(() => {
+    if (!currentCase) void fetchCases();
+  }, [caseId, currentCase, fetchCases]);
+
+  if (!currentCase) {
+    const justReviewed = String(reviewedService?.id ?? "") === caseId;
+
+    return (
+      <div className="mx-auto max-w-3xl">
+        {justReviewed ? (
+          <p role="status" className="rounded border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            Review saved for {reviewedService?.trackingNumber}.
+          </p>
+        ) : (
+          <p role={error ? "alert" : "status"} className={error ? "text-sm text-red-700" : "text-sm text-slate-500"}>
+            {error || (loading ? "Loading service case..." : "Service case not found.")}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   const workflowStages = [
     "Prepayment Invoice",
     "Transit Permission",
@@ -85,7 +114,7 @@ export default function SingleServiceCasePage() {
           <div className="border-t border-slate-200 pt-5"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Risk & compliance</p><span className="mt-2 inline-flex rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">◉ Yellow channel</span><p className="mt-2 text-xs text-slate-500">Documentary review required before release. Assessor sign-off is mandatory.</p></div>
           <div className="border-t border-slate-200 pt-5"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Recent activity</p><div className="mt-3 space-y-3 text-xs text-slate-600"><p>› <strong className="text-slate-900">{currentCase.currentStage}</strong> requires customer action <span className="block pl-3 text-slate-500">5d ago</span></p><p>› <strong className="text-slate-900">Inspection</strong> completed <span className="block pl-3 text-slate-500">6d ago</span></p><p>› <strong className="text-slate-900">Warehouse Status</strong> completed <span className="block pl-3 text-slate-500">15d ago</span></p></div></div>
           <StageEvidence files={currentCase.evidenceFiles} currentStage={currentCase.currentStage} />
-          <AssessmentDecision />
+          <AssessmentDecision shipmentId={currentCase.shipmentId} />
         </div>
       </section>
     </div>

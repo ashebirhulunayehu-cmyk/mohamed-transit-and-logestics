@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Mail, MapPin, Phone, UserRound, Lock, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -8,8 +8,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
 import { CustomerPageHeader } from "@/features/customer/components/CustomerPageHeader";
-import { CustomerShell } from "@/features/customer/components/CustomerShell";
-import useAuthStore from "@/modules/auth/auth.store";
+import useAuthStore, { hasCustomerAccount } from "@/modules/auth/auth.store";
+import { useCustomerServiceStore } from "@/modules/customer/customer.store";
+import { updateCustomerProfile } from "@/modules/customer/customer.endpoint";
 
 // Validation Schema for Password Update
 const changePasswordSchema = z
@@ -31,11 +32,32 @@ const changePasswordSchema = z
 
 type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 
+const editProfileSchema = z.object({
+  contactPerson: z.string().trim().min(1, "Contact name is required"),
+  contactEmail: z.string().trim().email("Enter a valid email address"),
+  contactPhone: z.string().trim().min(5, "Enter a valid phone number"),
+});
+
+type EditProfileFormData = z.infer<typeof editProfileSchema>;
+
 export default function CustomerProfilePage() {
   const { lang = "am" } = useParams<{ lang: string }>();
   const isAm = lang === "am";
 
   const { user, updatePassword, loading } = useAuthStore();
+  const shouldLoadCustomerProfile = hasCustomerAccount(user);
+  const { profile, getCustomerProfile } = useCustomerServiceStore();
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  const [savedContact, setSavedContact] = useState<EditProfileFormData | null>(null);
+
+  useEffect(() => {
+    if (shouldLoadCustomerProfile) void getCustomerProfile();
+  }, [getCustomerProfile, shouldLoadCustomerProfile]);
+
+  const profileName = user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : user?.username || "Customer";
+  const profilePhoto = user?.profilePhoto || "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80";
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -49,6 +71,67 @@ export default function CustomerProfilePage() {
   } = useForm<ChangePasswordFormData>({
     resolver: zodResolver(changePasswordSchema),
   });
+
+  const {
+    register: registerProfile,
+    handleSubmit: handleProfileSubmit,
+    reset: resetProfile,
+    formState: { errors: profileErrors, isSubmitting: isSavingProfile },
+  } = useForm<EditProfileFormData>({
+    resolver: zodResolver(editProfileSchema),
+    defaultValues: {
+      contactPerson: "",
+      contactEmail: "",
+      contactPhone: "",
+    },
+  });
+
+  useEffect(() => {
+    resetProfile({
+      contactPerson: profile?.contactPerson || [user?.firstName, user?.lastName].filter(Boolean).join(" "),
+      contactEmail: profile?.contactEmail || user?.email || "",
+      contactPhone: profile?.contactPhone || user?.phone || user?.phoneNumber || "",
+    });
+  }, [profile, resetProfile, user]);
+
+  const onProfileSubmit = async (data: EditProfileFormData) => {
+    setProfileSaveError(null);
+    setProfileSaveSuccess(false);
+
+    if (!shouldLoadCustomerProfile) {
+      setProfileSaveError(isAm ? "የተጠቃሚ መለያ አልተገኘም።" : "Could not determine the user account to update.");
+      return;
+    }
+
+    try {
+      await updateCustomerProfile({
+        businessName: profile?.businessName ?? undefined,
+        businessAddress: profile?.businessAddress ?? undefined,
+        city: profile?.city ?? undefined,
+        state: profile?.state ?? undefined,
+        postalCode: profile?.postalCode ?? undefined,
+        contactPerson: data.contactPerson,
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone,
+      });
+      setSavedContact(data);
+      if (shouldLoadCustomerProfile) await getCustomerProfile();
+      setProfileSaveSuccess(true);
+      setIsEditingProfile(false);
+    } catch (error: unknown) {
+      setProfileSaveError(
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : isAm ? "ፕሮፋይሉን ማዘመን አልተሳካም።" : "Unable to update your profile.",
+      );
+    }
+  };
+
+  const displayedContactPerson = savedContact?.contactPerson || profile?.contactPerson || profileName;
+  const displayedContactEmail = savedContact?.contactEmail || profile?.contactEmail || user?.email || "";
+  const displayedContactPhone = savedContact?.contactPhone || profile?.contactPhone || user?.phone || "";
 
   const onSubmit = async (data: ChangePasswordFormData) => {
     setErrorMessage(null);
@@ -72,7 +155,7 @@ export default function CustomerProfilePage() {
   };
 
   return (
-    <CustomerShell>
+    <>
       <CustomerPageHeader
         eyebrow={isAm ? "አካውንት" : "Account"}
         title={isAm ? "ፕሮፋይል" : "Profile"}
@@ -86,26 +169,60 @@ export default function CustomerProfilePage() {
         {/* Profile Card */}
         <section className="rounded border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center gap-4 border-b border-slate-200 p-5">
-            <div className="flex h-14 w-14 items-center justify-center rounded bg-blue-100 text-blue-700 font-bold text-lg">
-              {user?.firstName ? user.firstName[0].toUpperCase() : <UserRound className="h-7 w-7" />}
+            <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded bg-blue-100 text-blue-700 font-bold text-lg">
+              {user?.profilePhoto || user?.firstName ? (
+                <img src={profilePhoto} alt={profileName} className="h-full w-full object-cover" />
+              ) : (
+                <UserRound className="h-7 w-7" />
+              )}
             </div>
             <div>
               <h2 className="text-base font-semibold text-slate-900">
-                {user?.firstName ? `${user.firstName} ${user.lastName || ""}` : user?.username || "Selamawit Bekele"}
+                {displayedContactPerson}
               </h2>
               <p className="text-xs text-slate-500">
-                {isAm ? "ደንበኛ / አስመጪ" : "Customer / Importer"} · {user?.id || "CUS-10241"}
+                {isAm ? "ደንበኛ / አስመጪ" : "Customer / Importer"} · {profile?.userId ?? user?.id ?? "—"}
               </p>
             </div>
           </div>
 
+          {profileSaveSuccess && (
+            <p className="mx-5 mt-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-800" role="status">
+              {isAm ? "የመገናኛ መረጃዎ ተዘምኗል።" : "Your contact details have been updated."}
+            </p>
+          )}
+          {profileSaveError && (
+            <p className="mx-5 mt-4 rounded border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800" role="alert">
+              {profileSaveError}
+            </p>
+          )}
+
+          {isEditingProfile ? (
+            <form id="customer-profile-edit" onSubmit={handleProfileSubmit(onProfileSubmit)} className="grid gap-4 p-5 sm:grid-cols-2">
+              <div>
+                <label htmlFor="contactPerson" className="mb-1 block text-xs font-medium text-slate-600">{isAm ? "የእውቂያ ሰው" : "Contact person"}</label>
+                <input id="contactPerson" {...registerProfile("contactPerson")} className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {profileErrors.contactPerson && <p className="mt-1 text-xs text-rose-600">{profileErrors.contactPerson.message}</p>}
+              </div>
+              <div>
+                <label htmlFor="contactEmail" className="mb-1 block text-xs font-medium text-slate-600">{isAm ? "ኢሜይል" : "Email"}</label>
+                <input id="contactEmail" type="email" {...registerProfile("contactEmail")} className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {profileErrors.contactEmail && <p className="mt-1 text-xs text-rose-600">{profileErrors.contactEmail.message}</p>}
+              </div>
+              <div>
+                <label htmlFor="contactPhone" className="mb-1 block text-xs font-medium text-slate-600">{isAm ? "ስልክ" : "Phone"}</label>
+                <input id="contactPhone" type="tel" {...registerProfile("contactPhone")} className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {profileErrors.contactPhone && <p className="mt-1 text-xs text-rose-600">{profileErrors.contactPhone.message}</p>}
+              </div>
+            </form>
+          ) : (
           <dl className="grid gap-4 p-5 sm:grid-cols-2">
             <div>
               <dt className="flex items-center gap-2 text-xs text-slate-500">
                 <Mail className="h-4 w-4" /> {isAm ? "ኢሜይል" : "Email"}
               </dt>
               <dd className="mt-2 text-sm font-medium text-slate-800">
-                {user?.email || "selamawit@horizonagro.et"}
+                {displayedContactEmail}
               </dd>
             </div>
 
@@ -114,7 +231,7 @@ export default function CustomerProfilePage() {
                 <Phone className="h-4 w-4" /> {isAm ? "ስልክ" : "Phone"}
               </dt>
               <dd className="mt-2 text-sm font-medium text-slate-800">
-                {user?.phone || "+251 911 234 567"}
+                {displayedContactPhone}
               </dd>
             </div>
 
@@ -123,15 +240,45 @@ export default function CustomerProfilePage() {
                 <MapPin className="h-4 w-4" /> {isAm ? "ድርጅት" : "Organisation"}
               </dt>
               <dd className="mt-2 text-sm font-medium text-slate-800">
-                Horizon Agro Import PLC
+                {profile?.businessName || "Horizon Agro Import PLC"}
+              </dd>
+            </div>
+
+            <div>
+              <dt className="flex items-center gap-2 text-xs text-slate-500">
+                <MapPin className="h-4 w-4" /> {isAm ? "አድራሻ" : "Business Address"}
+              </dt>
+              <dd className="mt-2 text-sm font-medium text-slate-800">
+                {profile?.businessAddress || "-"}
+              </dd>
+            </div>
+
+            <div>
+              <dt className="flex items-center gap-2 text-xs text-slate-500">
+                <UserRound className="h-4 w-4" /> {isAm ? "የንግድ አይነት" : "Business Type"}
+              </dt>
+              <dd className="mt-2 text-sm font-medium text-slate-800">
+                {profile?.businessType || "-"}
               </dd>
             </div>
           </dl>
+          )}
 
           <div className="border-t border-slate-200 p-5">
-            <button className="rounded bg-[#185a96] px-4 py-2 text-xs font-semibold text-white hover:bg-[#124574] transition">
-              {isAm ? "ፕሮፋይል አስተካክል" : "Edit profile"}
-            </button>
+            {isEditingProfile ? (
+              <div className="flex flex-wrap gap-2">
+                <button type="submit" form="customer-profile-edit" disabled={isSavingProfile} className="rounded bg-[#185a96] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#124574] disabled:cursor-not-allowed disabled:opacity-60">
+                  {isSavingProfile ? (isAm ? "እየተቀመጠ ነው..." : "Saving...") : (isAm ? "መረጃዎችን አስቀምጥ" : "Save changes")}
+                </button>
+                <button type="button" onClick={() => { setIsEditingProfile(false); setProfileSaveError(null); }} className="rounded border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  {isAm ? "ሰርዝ" : "Cancel"}
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => { setIsEditingProfile(true); setProfileSaveSuccess(false); }} className="rounded bg-[#185a96] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#124574]">
+                {isAm ? "ፕሮፋይል አስተካክል" : "Edit profile"}
+              </button>
+            )}
           </div>
         </section>
 
@@ -250,6 +397,6 @@ export default function CustomerProfilePage() {
           </form>
         </section>
       </main>
-    </CustomerShell>
+    </>
   );
 }

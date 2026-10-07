@@ -3,7 +3,9 @@
 import { create } from "zustand";
 import {
   deleteDocument,
+  deleteStageTransportDocument,
   downloadDocument,
+  downloadDocuments,
   getServiceDocuments,
   uploadServiceDocument,
   verifyDocument,
@@ -16,9 +18,18 @@ interface DocumentStore extends DocumentFiltersState {
   error: string | null;
   fetchDocuments: (params?: Record<string, unknown>) => Promise<void>;
   uploadDocument: (payload: FormData) => Promise<void>;
-  verifyDocumentById: (payload: { documentId?: string | number; id?: string | number; isVerified?: boolean; notes?: string }) => Promise<void>;
+  verifyDocumentById: (payload: {
+    documentId?: string | number;
+    id?: string | number;
+    isVerified?: boolean;
+    notes?: string;
+    verificationNotes?: string;
+    verifiedByUserId?: string | number;
+  }) => Promise<void>;
   removeDocument: (id: string | number) => Promise<void>;
+  removeStageTransportDocument: (id: string | number) => Promise<void>;
   downloadFile: (documentId: string | number) => Promise<unknown>;
+  downloadFiles: (documentIds: Array<string | number>) => Promise<unknown>;
   setSearchQuery: (query: string) => void;
   setStatusFilter: (status: string) => void;
   setTypeFilter: (type: string) => void;
@@ -97,7 +108,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   verifyDocumentById: async (payload) => {
     set({ loading: true, error: null });
     try {
-      await verifyDocument(payload);
+      await verifyDocument({
+        documentId: payload.documentId ?? payload.id,
+        id: payload.id,
+        isVerified: payload.isVerified ?? true,
+        notes: payload.notes ?? payload.verificationNotes ?? "Verified by user",
+        verificationNotes: payload.verificationNotes ?? payload.notes ?? "Verified by user",
+        verifiedByUserId: payload.verifiedByUserId,
+      });
       await get().fetchDocuments();
     } catch (err: unknown) {
       set({
@@ -122,6 +140,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     }
   },
 
+  removeStageTransportDocument: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      await deleteStageTransportDocument(id);
+      await get().fetchDocuments();
+    } catch (err: unknown) {
+      set({
+        error: err instanceof Error ? err.message : "Stage transport document delete failed",
+        loading: false,
+      });
+      throw err;
+    }
+  },
+
   downloadFile: async (documentId) => {
     set({ loading: true, error: null });
     try {
@@ -131,6 +163,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     } catch (err: unknown) {
       set({
         error: err instanceof Error ? err.message : "Download failed",
+        loading: false,
+      });
+      throw err;
+    }
+  },
+
+  downloadFiles: async (documentIds) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await downloadDocuments(documentIds);
+      set({ loading: false });
+      return response;
+    } catch (err: unknown) {
+      set({
+        error: err instanceof Error ? err.message : "Batch download failed",
         loading: false,
       });
       throw err;

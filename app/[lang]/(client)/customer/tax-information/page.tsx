@@ -1,9 +1,10 @@
-import { FileText, WalletCards } from "lucide-react";
-import { CustomerPageHeader } from "@/features/customer/components/CustomerPageHeader";
-import { CustomerShell } from "@/features/customer/components/CustomerShell";
-import { CustomerStatusBadge } from "@/features/customer/components/CustomerStatusBadge";
-import { customerServices } from "@/features/customer/customer.data";
+import { redirect } from "next/navigation";
 
-export default function TaxInformationPage() {
-  return <CustomerShell><CustomerPageHeader eyebrow="Finance" title="Tax information" description="Duty, VAT, surtax and withholding across your consignments." /><main className="mx-auto max-w-[1100px] space-y-4 p-5 sm:p-7"><section className="grid gap-3 sm:grid-cols-3">{[["Outstanding payable", "ETB 486,214", "Due 01 Aug 2026", "border-l-amber-600", WalletCards], ["Settled this year", "ETB 3.42M", "", "border-l-emerald-600", WalletCards], ["Assessments issued", "4", "", "border-l-slate-300", FileText]].map(([label, value, detail, border, Icon]) => <div key={label as string} className={`relative rounded border border-slate-200 border-l-2 ${border as string} bg-white p-4 shadow-sm`}><Icon className="absolute right-4 top-4 h-4 w-4 text-slate-500" /><p className="text-xs text-slate-600">{label as string}</p><p className="mt-3 text-2xl font-semibold text-slate-950">{value as string}</p><p className="mt-1 text-xs text-slate-500">{detail as string}</p></div>)}</section><section className="overflow-hidden rounded border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-4 py-4"><h2 className="text-sm font-semibold">Assessment history</h2></div><div className="overflow-x-auto"><table className="w-full min-w-[650px] text-left text-xs"><thead className="border-b border-slate-200 uppercase text-slate-500"><tr><th className="px-4 py-4">Service</th><th className="px-4 py-4">Declared value</th><th className="px-4 py-4">Status</th><th className="px-4 py-4">Risk</th></tr></thead><tbody className="divide-y divide-slate-100">{customerServices.map((service, index) => <tr key={service.id}><td className="px-4 py-4 font-mono font-semibold text-blue-700">{service.id}</td><td className="px-4 py-4 text-slate-600">ETB {index ? "2,140,900.00" : "1,842,600.00"}</td><td className="px-4 py-4"><CustomerStatusBadge status={service.status} /></td><td className="px-4 py-4"><span className={`rounded border px-2 py-1 font-semibold ${index ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>{service.channel}</span></td></tr>)}</tbody></table></div></section></main></CustomerShell>;
+export default async function CustomerTaxInformationPage({
+  params,
+}: {
+  params: Promise<{ lang: string }>;
+}) {
+  const { lang } = await params;
+  redirect(`/${lang}/customer/dashboard?view=tax-records`);
 }

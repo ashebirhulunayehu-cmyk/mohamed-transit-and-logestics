@@ -1,8 +1,10 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { CustomerPageHeader } from "@/features/customer/components/CustomerPageHeader";
-import { CustomerShell } from "@/features/customer/components/CustomerShell";
-
-export default function CustomerContactPage() {
-  return <CustomerShell><CustomerPageHeader eyebrow="Support" title="Contact us" description="Reach the import directorate. Responses are typically within one working day." /><main className="mx-auto grid max-w-[1000px] gap-4 p-5 sm:p-7 lg:grid-cols-2"><section className="rounded border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-4 py-4"><h2 className="text-sm font-semibold">Send a message</h2></div><form className="space-y-3 p-4"><input className="h-9 w-full rounded border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Subject" /><textarea className="h-28 w-full resize-y rounded border border-slate-200 p-3 text-sm outline-none focus:border-cyan-500" placeholder="Describe your question or issue..." /><button className="rounded bg-[#185a96] px-4 py-2 text-xs font-semibold text-white">Submit request</button></form></section><section className="rounded border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-4 py-4"><h2 className="text-sm font-semibold">Directorate contacts</h2></div><dl className="grid grid-cols-[1fr_1.5fr] gap-y-4 p-4 text-sm"><dt className="text-slate-500">Import desk</dt><dd>+251 11 551 2233</dd><dt className="text-slate-500">Email</dt><dd>imports@mot.gov.et</dd><dt className="text-slate-500">Modjo Dry Port</dt><dd>+251 22 112 4478</dd><dt className="text-slate-500">Hours</dt><dd>Mon-Fri, 08:30-17:00 EAT</dd></dl></section></main></CustomerShell>;
+export default async function CustomerContactPage({
+  params,
+}: {
+  params: Promise<{ lang: string }>;
+}) {
+  const { lang } = await params;
+  redirect(`/${lang}/customer/dashboard?view=support-requests`);
 }

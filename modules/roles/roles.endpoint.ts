@@ -1,6 +1,12 @@
 import { API_ROUTES } from "@/modules/api";
 import { service } from "@/modules/utils/axios/service";
-import type { RoleDto, RoleListParams, RoleResponse } from "./roles.types";
+import type {
+  RoleDto,
+  RoleListParams,
+  RolePrivilegeDto,
+  CreateRolePrivilegeRequest,
+  RoleResponse,
+} from "./roles.types";
 
 export const rolesEndpoints = Object.freeze(API_ROUTES.roles);
 
@@ -18,3 +24,10 @@ export const getAllRoles = (params?: RoleListParams): Promise<RoleResponse> =>
 
 export const getRoleById = (id: string | number): Promise<RoleResponse> =>
   service.get(rolesEndpoints.getById(id));
+
+export const getAllRolePrivileges = (): Promise<RolePrivilegeDto[]> =>
+  service.get(API_ROUTES.rolePrivilege.getAll);
+
+export const createRolePrivileges = (
+  payload: CreateRolePrivilegeRequest
+): Promise<unknown> => service.post(API_ROUTES.rolePrivilege.create, payload);

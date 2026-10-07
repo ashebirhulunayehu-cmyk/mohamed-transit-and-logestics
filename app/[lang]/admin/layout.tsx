@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import AssessorSidebar from "@/components/assessor/AssessorSidebar";
 import AssessorHeader from "@/components/assessor/AssessorHeader";
 import { useAssessorStore } from "@/store/assessorStore";
@@ -12,7 +13,15 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
+  const pathname = usePathname();
   const { sidebarCollapsed } = useAssessorStore();
+
+  if (
+    pathname.includes("/admin/manager") ||
+    pathname.includes("/admin/data-encoder")
+  ) {
+    return <div className="min-h-screen bg-slate-50">{children}</div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">

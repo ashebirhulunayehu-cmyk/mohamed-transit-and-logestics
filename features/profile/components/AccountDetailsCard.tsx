@@ -1,15 +1,32 @@
 "use client";
 
+import useAuthStore from "@/modules/auth/auth.store";
 import { useProfileStore } from "../profile.store";
 
+type AuthUserWithRole = {
+  roleName?: string;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  id?: string | number;
+};
+
 export default function AccountDetailsCard() {
+  const authUser = useAuthStore((state) => state.user) as AuthUserWithRole | null;
   const { fullName, role, branch, userId } = useProfileStore();
 
+  const resolvedFullName = authUser?.firstName || authUser?.lastName
+    ? `${authUser?.firstName || ""} ${authUser?.lastName || ""}`.trim()
+    : authUser?.username || fullName;
+
+  const resolvedRole = authUser?.roleName || role;
+  const resolvedUserId = authUser?.id ? String(authUser.id) : userId;
+
   const details = [
-    { label: "Full name", value: fullName },
-    { label: "Role", value: role },
+    { label: "Full name", value: resolvedFullName },
+    { label: "Role", value: resolvedRole },
     { label: "Branch", value: branch },
-    { label: "User ID", value: userId },
+    { label: "User ID", value: resolvedUserId },
   ];
 
   return (

@@ -2,9 +2,14 @@ import { create } from 'zustand';
 import { AssessorEndpoints } from './assessor.endpoint.ts';
 import type {
   AssessorApiEnvelope,
+  AssessorComplianceFeedback,
+  AssessorComplianceFeedbackRequest,
   AssessorComplianceIssue,
   AssessorDashboardSummary,
   AssessorItem,
+  AssessorReviewedService,
+  AssessorServiceReviewRequest,
+  CustomerApprovalResult,
   PendingCustomerApproval,
 } from './assessor.type';
 
@@ -13,12 +18,19 @@ interface AssessorState {
   pendingServices: AssessorItem[];
   servicesUnderOversight: AssessorItem[];
   complianceIssues: AssessorItem[];
+  complianceFeedback: AssessorComplianceFeedback | null;
   dashboardData: AssessorDashboardSummary | null;
+  reviewedService: AssessorReviewedService | null;
   loading: boolean;
   error: string | null;
 
   fetchPendingCustomers: () => Promise<void>;
-  approveCustomer: (payload: { customerId: number; isApproved: boolean; notes: string | null }) => Promise<void>;
+  fetchPendingServices: () => Promise<void>;
+  fetchServicesUnderOversight: () => Promise<void>;
+  fetchServiceWorklists: () => Promise<void>;
+  approveCustomer: (payload: { customerId: number; isApproved: boolean; notes: string | null }) => Promise<CustomerApprovalResult>;
+  reviewService: (payload: AssessorServiceReviewRequest) => Promise<AssessorReviewedService>;
+  addComplianceFeedback: (payload: AssessorComplianceFeedbackRequest) => Promise<AssessorComplianceFeedback>;
   fetchDashboard: () => Promise<void>;
   fetchComplianceIssues: () => Promise<void>;
 }
@@ -72,7 +84,9 @@ export const useAssessorStore = create<AssessorState>((set, get) => ({
   pendingServices: [],
   servicesUnderOversight: [],
   complianceIssues: [],
+  complianceFeedback: null,
   dashboardData: null,
+  reviewedService: null,
   loading: false,
   error: null,
 
@@ -87,13 +101,78 @@ export const useAssessorStore = create<AssessorState>((set, get) => ({
     }
   },
 
+  fetchPendingServices: async () => {
+    set({ loading: true, error: null });
+    try {
+      const response = (await AssessorEndpoints.getPendingServices()) as AssessorApiEnvelope<AssessorItem[]> | unknown;
+      const payload = unwrapApiData(response);
+      set({ pendingServices: normalizeArray(payload), loading: false });
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err, 'Failed to fetch pending services'), loading: false });
+    }
+  },
+
+  fetchServicesUnderOversight: async () => {
+    set({ loading: true, error: null });
+    try {
+      const response = (await AssessorEndpoints.getServicesUnderOversight()) as AssessorApiEnvelope<AssessorItem[]> | unknown;
+      const payload = unwrapApiData(response);
+      set({ servicesUnderOversight: normalizeArray(payload), loading: false });
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err, 'Failed to fetch services under oversight'), loading: false });
+    }
+  },
+
+  fetchServiceWorklists: async () => {
+    set({ loading: true, error: null });
+    try {
+      const [pendingResponse, oversightResponse] = await Promise.all([
+        AssessorEndpoints.getPendingServices(),
+        AssessorEndpoints.getServicesUnderOversight(),
+      ]);
+      set({
+        pendingServices: normalizeArray(unwrapApiData(pendingResponse)),
+        servicesUnderOversight: normalizeArray(unwrapApiData(oversightResponse)),
+        loading: false,
+        error: null,
+      });
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err, 'Failed to fetch assessor service worklists'), loading: false });
+    }
+  },
+
   approveCustomer: async (payload) => {
     set({ loading: true, error: null });
     try {
-      await AssessorEndpoints.approveCustomer(payload);
+      const approvedCustomer = await AssessorEndpoints.approveCustomer(payload);
       await get().fetchPendingCustomers();
+      return approvedCustomer;
     } catch (err: unknown) {
       set({ error: getErrorMessage(err, 'Action failed'), loading: false });
+      throw err;
+    }
+  },
+
+  reviewService: async (payload) => {
+    set({ loading: true, error: null });
+    try {
+      const reviewedService = await AssessorEndpoints.reviewService(payload);
+      set({ reviewedService, loading: false, error: null });
+      return reviewedService;
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err, 'Service review failed'), loading: false });
+      throw err;
+    }
+  },
+
+  addComplianceFeedback: async (payload) => {
+    set({ loading: true, error: null });
+    try {
+      const complianceFeedback = await AssessorEndpoints.addComplianceFeedback(payload);
+      set({ complianceFeedback, loading: false, error: null });
+      return complianceFeedback;
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err, 'Failed to add compliance feedback'), loading: false });
       throw err;
     }
   },

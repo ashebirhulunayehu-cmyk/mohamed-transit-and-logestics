@@ -1,9 +1,17 @@
 "use client";
 
+import useAuthStore from "@/modules/auth/auth.store";
 import { useProfileStore } from "../profile.store";
 
 export default function SecurityControlsCard() {
-  const { twoFactorEnabled, sessionTimeout, revokeOtherSessions } = useProfileStore();
+  const authUser = useAuthStore((state) => state.user);
+  const { twoFactorEnabled, sessionTimeout, revokeOtherSessions, toggleTwoFactor } = useProfileStore();
+
+  const handleToggle = () => {
+    toggleTwoFactor();
+  };
+
+  const email = authUser?.email || "user@example.com";
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-between">
@@ -14,14 +22,28 @@ export default function SecurityControlsCard() {
         <div className="space-y-4 divide-y divide-slate-100">
           <div className="flex items-center justify-between pt-2">
             <span className="text-sm text-slate-700">Two-factor authentication (SMS OTP)</span>
-            <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+            <button
+              type="button"
+              aria-pressed={twoFactorEnabled}
+              onClick={handleToggle}
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold transition ${
+                twoFactorEnabled
+                  ? "bg-emerald-50 text-emerald-600"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
               {twoFactorEnabled ? "Enabled" : "Disabled"}
-            </span>
+            </button>
           </div>
 
           <div className="flex items-center justify-between pt-4">
             <span className="text-sm text-slate-700">Session timeout</span>
             <span className="text-sm text-slate-600">{sessionTimeout}</span>
+          </div>
+
+          <div className="flex items-center justify-between pt-4">
+            <span className="text-sm text-slate-700">Recovery email</span>
+            <span className="text-sm text-slate-600">{email}</span>
           </div>
 
           <div className="flex items-center justify-between pt-4">

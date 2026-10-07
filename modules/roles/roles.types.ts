@@ -11,6 +11,21 @@ export interface RoleDto {
   privileges?: PrivilegeDto[];
 }
 
+export interface RolePrivilegeDto {
+  id: number;
+  roleId: number;
+  privilegeId: number;
+  privilege: PrivilegeDto | null;
+  role: RoleDto | null;
+  recordStatus: number;
+}
+
+export interface CreateRolePrivilegeRequest {
+  roleId: number;
+  privileges: number[];
+  [key: string]: unknown;
+}
+
 export interface RoleListParams {
   recordStatus?: string;
 }

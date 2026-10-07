@@ -83,6 +83,27 @@ export interface LoginUserRequest {
   password: string;
 }
 
+export interface LoginPrivilege extends IPrivilege {
+  id: number;
+  action: string;
+  description: string;
+}
+
+export interface LoginRole extends IUserRoleAssignment {
+  id: number;
+  roleName: string;
+  privileges: LoginPrivilege[];
+}
+
+export interface LoginResponse extends IUser, Record<string, unknown> {
+  id: number;
+  username: string;
+  email: string;
+  accessToken: string;
+  refreshToken: string;
+  roles: LoginRole[];
+}
+
 export interface RefreshTokenRequest {
   refreshToken: string;
   command?: "RefreshToken";
@@ -104,6 +125,12 @@ export interface ResetPasswordRequest {
   confirmPassword?: string;
 }
 
+export interface EmailResetPasswordRequest {
+  token: string;
+  email: string;
+  newPassword: string;
+}
+
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
@@ -115,8 +142,10 @@ export type AuthState = { loading: boolean; user: IUser | null; error: string | 
 export type AuthStore = AuthState & {
   login: (payload: ILogin) => Promise<IUser>;
   logout: () => Promise<void>;
+  updateProfile: (payload: UpdateUserRequest) => Promise<IUser>;
   signUp: (payload: FormData | IUser) => Promise<void>;
   forgotPassword: (payload: ForgotPasswordRequest) => Promise<void>;
   updatePassword: (payload: ChangePasswordRequest) => Promise<void>;
   resetPassword: (payload: ResetPasswordRequest) => Promise<void>;
+  resetPasswordFromEmail: (payload: EmailResetPasswordRequest) => Promise<void>;
 };

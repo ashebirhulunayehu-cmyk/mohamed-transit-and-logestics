@@ -7,11 +7,46 @@ export interface DocumentActionPayload {
   documentId?: string | number;
   id?: string | number;
   serviceId?: string;
+  serviceStageId?: string | number;
   isVerified?: boolean;
   notes?: string;
+  verificationNotes?: string;
+  verifiedByUserId?: string | number;
+  file?: File | Blob | string;
+  description?: string;
+  expiryDate?: string | Date;
   documentIds?: Array<string | number>;
   ids?: Array<string | number>;
 }
+
+const normalizeDocumentIds = (
+  payload?: Array<string | number> | DocumentActionPayload | FormData
+): Array<string | number> => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (payload instanceof FormData) {
+    const raw = payload.getAll("documentIds").flatMap((value) =>
+      value === null || value === undefined || String(value).trim() === ""
+        ? []
+        : [String(value)]
+    );
+    return raw.length ? raw.map((value) => Number(value) || value) : [];
+  }
+
+  if (payload && typeof payload === "object") {
+    const ids = Array.isArray(payload.documentIds)
+      ? payload.documentIds
+      : Array.isArray(payload.ids)
+        ? payload.ids
+        : [];
+
+    return ids;
+  }
+
+  return [];
+};
 
 export const documentEndpoints = {
   uploadServiceDocument: (payload: FormData | DocumentActionPayload) =>
@@ -22,8 +57,11 @@ export const documentEndpoints = {
 
   deleteDocument: (id: string | number) =>
     service.delete(API_ROUTES.document.deleteDocument, {
-      data: { id, documentId: id },
+      params: { documentId: id },
     }),
+
+  deleteStageTransportDocument: (id: string | number) =>
+    service.delete(API_ROUTES.shipment.deleteStageTransportDocument(id)),
 
   verifyDocument: (payload: DocumentActionPayload) =>
     service.post(API_ROUTES.document.verifyDocument, payload),
@@ -31,10 +69,11 @@ export const documentEndpoints = {
   downloadDocument: (documentId: string | number, params?: DocumentQueryParams) =>
     service.get(API_ROUTES.document.downloadDocument, {
       params: { documentId, ...params },
+      responseType: "blob",
     }),
 
-  downloadDocuments: (payload: FormData | DocumentActionPayload) =>
-    service.post(API_ROUTES.document.downloadDocuments, payload),
+  downloadDocuments: (payload: Array<string | number> | DocumentActionPayload | FormData) =>
+    service.post(API_ROUTES.document.downloadDocuments, normalizeDocumentIds(payload)),
 };
 
 export const uploadServiceDocument = (payload: FormData | DocumentActionPayload) =>
@@ -46,11 +85,15 @@ export const getServiceDocuments = (params?: DocumentQueryParams) =>
 export const deleteDocument = (id: string | number) =>
   documentEndpoints.deleteDocument(id);
 
+export const deleteStageTransportDocument = (id: string | number) =>
+  documentEndpoints.deleteStageTransportDocument(id);
+
 export const verifyDocument = (payload: DocumentActionPayload) =>
   documentEndpoints.verifyDocument(payload);
 
 export const downloadDocument = (documentId: string | number, params?: DocumentQueryParams) =>
   documentEndpoints.downloadDocument(documentId, params);
 
-export const downloadDocuments = (payload: FormData | DocumentActionPayload) =>
-  documentEndpoints.downloadDocuments(payload);
+export const downloadDocuments = (
+  payload: Array<string | number> | DocumentActionPayload | FormData
+) => documentEndpoints.downloadDocuments(payload);

@@ -110,7 +110,7 @@ export function ServiceReviewDetails() {
       />
 
       {/* Assessment Decision Section */}
-      <AssessmentDecision />
+      <AssessmentDecision shipmentId={selectedCase.shipmentId} />
     </div>
   );
 }

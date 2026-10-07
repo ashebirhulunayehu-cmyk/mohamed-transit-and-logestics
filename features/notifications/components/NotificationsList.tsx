@@ -1,24 +1,32 @@
 'use client';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNotificationStore } from '../notification.store';
 import { NotificationCategory } from '../notification.types';
 
 export const NotificationsList = () => {
   const { 
     notifications, 
+    unreadCount,
     filterTab, 
     setFilterTab, 
     showUnreadOnly, 
     toggleShowUnreadOnly, 
     markAsRead, 
-    markAllAsRead 
+    markAllAsRead,
+    loading,
+    error,
+    fetchNotifications,
+    fetchUnreadCount,
   } = useNotificationStore();
+
+  useEffect(() => {
+    void fetchNotifications();
+    void fetchUnreadCount();
+  }, [fetchNotifications, fetchUnreadCount]);
 
   const tabs: ("All" | NotificationCategory)[] = [
     "All", "Service Updates", "Documents", "Approvals", "Payments", "Inspection", "Risk", "Messages", "System"
   ];
-
-  const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const filteredNotifications = notifications.filter((n) => {
     if (showUnreadOnly && n.isRead) return false;
@@ -36,7 +44,7 @@ export const NotificationsList = () => {
           <p className="text-xs text-slate-500 mt-1">Everything that changed on your cases, documents, approvals and payments.</p>
           <div className="flex items-center space-x-2 mt-3">
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
-              {unreadCount} unread
+              {loading ? "Loading..." : `${unreadCount} unread`}
             </span>
             <span className="text-xs text-slate-400">of {notifications.length} total updates</span>
           </div>
@@ -62,6 +70,12 @@ export const NotificationsList = () => {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
@@ -92,7 +106,11 @@ export const NotificationsList = () => {
 
       {/* Notifications Feed */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs divide-y divide-slate-100 overflow-hidden">
-        {filteredNotifications.length === 0 ? (
+        {loading ? (
+          <div className="p-16 text-center text-slate-500 text-sm font-medium">
+            Loading notifications...
+          </div>
+        ) : filteredNotifications.length === 0 ? (
           <div className="p-16 text-center text-slate-400 text-xs font-medium">
             No notifications available in this category.
           </div>

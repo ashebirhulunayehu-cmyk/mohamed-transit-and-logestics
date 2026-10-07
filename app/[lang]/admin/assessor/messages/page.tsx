@@ -3,11 +3,8 @@ import { ChatWindow } from "@/features/messages/components/ChatWindow";
 
 export default function MessagesPage() {
   return (
-    <div className="flex h-[calc(100vh-5rem)] overflow-hidden bg-white border border-slate-200 rounded-2xl shadow-sm">
-      {/* የግራ በኩል የቻት ዝርዝር እና ፍለጋ */}
+    <div className="mx-auto flex h-[calc(100dvh-12rem)] min-h-[360px] w-full max-w-[1400px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <ChatSidebar />
-
-      {/* በቀኝ በኩል የሚታየው ዋናው የውይይት መስኮት */}
       <ChatWindow />
     </div>
   );

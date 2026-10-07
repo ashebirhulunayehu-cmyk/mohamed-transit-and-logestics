@@ -1,4 +1,77 @@
+import type { CustomerProfileRecord } from "@/modules/customer/customer.type";
+
 export type AssessorItem = Record<string, unknown>;
+
+export type CustomerApprovalResult = CustomerProfileRecord;
+
+export interface AssessorServiceReviewRequest {
+  shipmentId: number;
+  isApproved: boolean;
+  reviewNotes: string | null;
+}
+
+export interface AssessorComplianceFeedbackRequest {
+  serviceId: string;
+  comment: string;
+  issueType?: string;
+}
+
+export interface AssessorReviewedService {
+  trackingNumber: string;
+  importerId: number;
+  importer: unknown | null;
+  description: string;
+  mode: number;
+  createdByDataEncoderId: number | null;
+  createdByDataEncoder: unknown | null;
+  assignedHub: number | null;
+  status: number;
+  createdByUserId: number | null;
+  createdByUser: unknown | null;
+  routeCategory: string;
+  declaredValue: number;
+  taxCategory: string;
+  countryOfOrigin: string;
+  riskLevel: number | null;
+  assignedCaseExecutorId: number | null;
+  assignedCaseExecutor: unknown | null;
+  serviceType: number | null;
+  assignedAssessorId: number | null;
+  assignedAssessor: unknown | null;
+  assignmentNotes: string | null;
+  stages: unknown[];
+  documents: unknown[];
+  messages: unknown[];
+  origin: string;
+  destination: string;
+  id: number;
+  createAt: string;
+  updatedAt: string | null;
+  recordStatus: number;
+}
+
+export interface AssessorComplianceFeedback {
+  subject: string;
+  content: string;
+  messageType: number;
+  isRead: boolean;
+  readAt: string | null;
+  isUrgent: boolean;
+  priority: string | number | null;
+  createdDate: string;
+  serviceId: number;
+  senderUserId: number;
+  recipientUserId: number | null;
+  serviceStageId: number | null;
+  service: AssessorReviewedService | null;
+  senderUser: unknown | null;
+  recipientUser: unknown | null;
+  serviceStage: unknown | null;
+  id: number;
+  createAt: string;
+  updatedAt: string | null;
+  recordStatus: number;
+}
 
 export interface AssessorApiEnvelope<T = unknown> {
   statusCode: number;

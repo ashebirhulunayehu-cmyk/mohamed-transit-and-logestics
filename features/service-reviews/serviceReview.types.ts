@@ -1,4 +1,4 @@
-export type RiskChannel = "Red channel" | "Yellow channel" | "Green channel";
+export type RiskChannel = "Red channel" | "Yellow channel" | "Green channel" | "Unassigned";
 export type CaseStatusTag = "Requires customer action" | "Blocked" | "Needs review" | "Signed off";
 
 export interface EvidenceFile {
@@ -11,6 +11,7 @@ export interface EvidenceFile {
 
 export interface ServiceCase {
   id: string;
+  shipmentId?: number;
   title: string;
   containerCount: string;
   importer: string;

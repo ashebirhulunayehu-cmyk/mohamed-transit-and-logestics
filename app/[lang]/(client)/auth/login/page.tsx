@@ -11,15 +11,54 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 import useAuthStore from "@/modules/auth/auth.store";
+
+const getRoleName = (value: unknown): string => {
+  if (!value) return "";
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const roleName = getRoleName(item);
+      if (roleName) return roleName;
+    }
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    const nestedRole = source.role;
+    const roleObject =
+      nestedRole && typeof nestedRole === "object"
+        ? (nestedRole as Record<string, unknown>)
+        : null;
+
+    const candidate =
+      source.roleName ??
+      roleObject?.name ??
+      source.name ??
+      source.role ??
+      source.RoleName ??
+      source.Role;
+
+    return getRoleName(candidate);
+  }
+
+  return "";
+};
 
 export default function LoginPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const lang = (params.lang as "am" | "en") || "en";
+  const callbackUrl = searchParams.get("callbackUrl") || "";
 
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
@@ -29,45 +68,36 @@ export default function LoginPage() {
 
   const extractRole = (dataItem: unknown): string => {
     if (!dataItem || typeof dataItem !== "object") {
-      return "customer";
+      return "";
     }
 
     const userData = dataItem as {
-      userRoles?: Array<{ role?: { name?: unknown } }>;
-      roles?: Array<string | { roleName?: unknown; name?: unknown }>;
+      userRoles?: unknown;
+      roles?: unknown;
       role?: unknown;
+      roleName?: unknown;
+      userType?: unknown;
+      accountType?: unknown;
       isSuperAdmin?: unknown;
+      name?: unknown;
     };
 
-    // 1. userRoles array ውስጥ ያለውን የ role name መፈለግ
-    const userRoleName = userData.userRoles?.[0]?.role?.name;
-    if (typeof userRoleName === "string") {
-      return userRoleName;
-    }
+    const directRole = getRoleName(
+      userData.role ??
+        userData.roleName ??
+        userData.userType ??
+        userData.accountType ??
+        userData.name ??
+        userData.userRoles ??
+        userData.roles
+    );
+    if (directRole) return directRole;
 
-    // 2. roles array (string or object)
-    const firstRole = userData.roles?.[0];
-    if (typeof firstRole === "string") {
-      return firstRole;
-    }
-    if (firstRole && typeof firstRole === "object") {
-      const roleName = firstRole.roleName || firstRole.name;
-      if (typeof roleName === "string") {
-        return roleName;
-      }
-    }
-
-    // 3. single role string
-    if (typeof userData.role === "string") {
-      return userData.role;
-    }
-
-    // 4. isSuperAdmin boolean ከሆነ
     if (userData.isSuperAdmin === true) {
       return "superadmin";
     }
 
-    return "customer";
+    return "";
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -83,25 +113,45 @@ export default function LoginPage() {
 
       const userObj = useAuthStore.getState().user;
       const extractedRole = extractRole(userObj).toLowerCase().trim();
+      const normalizedRole = extractedRole.toLowerCase();
+      const roleKey = normalizedRole.replace(/[^a-z]/g, "");
+      const destination = callbackUrl && callbackUrl.startsWith("/") ? callbackUrl : `/${lang}/customer`;
 
-      // --- ROUTING LOGIC ---
+      if (roleKey === "caseexecutor" || roleKey === "caseexecuter") {
+        router.push(`/${lang}/admin/case-Executer`);
+        return;
+      }
+
+      if (normalizedRole === "dataencoder" || normalizedRole === "dataencoderoperator") {
+        router.push(`/${lang}/admin/data-encoder/dashboard`);
+        return;
+      }
+
       if (
-        extractedRole === "superadmin" ||
-        extractedRole === "admin" ||
-        extractedRole === "assessor"
+        normalizedRole === "superadmin" ||
+        normalizedRole === "admin" ||
+        normalizedRole === "assessor" ||
+        normalizedRole === "manager"
       ) {
-        router.push(`/${lang}/admin/dashboard`);
+        router.push(
+          normalizedRole === "manager"
+            ? `/${lang}/admin/dashboard?role=manager`
+            : `/${lang}/admin/dashboard?role=${encodeURIComponent(normalizedRole)}`
+        );
         return;
       }
 
-      if (extractedRole === "customer" || extractedRole === "importer") {
-        router.push(`/${lang}/client/customer/dashboard`);
+      if (
+        !normalizedRole ||
+        normalizedRole.includes("customer") ||
+        normalizedRole.includes("importer") ||
+        normalizedRole.includes("user")
+      ) {
+        router.push(destination);
         return;
       }
 
-      setError(
-        `Your account role "${extractedRole}" is not configured for this portal.`
-      );
+      router.push(destination);
     } catch (err: unknown) {
       console.error("Login Error:", err);
       setError(
@@ -113,9 +163,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex h-screen w-screen items-center justify-center overflow-hidden bg-white">
+    <div className="fixed inset-0 z-50 flex min-h-dvh w-full items-center justify-center overflow-y-auto px-3 py-5 sm:px-6">
       {/* FULL SCREEN BRIGHT BACKGROUND IMAGE */}
-      <div className="absolute inset-0 h-full w-full">
+      <div className="absolute inset-0">
         <Image
           src="/login_image.png"
           alt="Import Export Management"

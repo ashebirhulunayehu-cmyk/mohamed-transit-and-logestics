@@ -1,11 +1,7 @@
 import { create } from 'zustand';
+import { AssessorEndpoints } from '@/modules/assessor/assessor.endpoint.ts';
 
-export type LogType = 
-  | 'Issued assessment' 
-  | 'Blocked stage' 
-  | 'Submitted for approval' 
-  | 'Requested revision' 
-  | 'Returned KYC';
+export type LogType = string;
 
 export interface AuditLog {
   id: string;
@@ -18,56 +14,96 @@ export interface AuditLog {
 
 interface AuditState {
   logs: AuditLog[];
+  loading: boolean;
+  error: string | null;
   searchQuery: string;
   selectedFilter: string;
+  fetchLogs: () => Promise<void>;
   setSearchQuery: (query: string) => void;
   setSelectedFilter: (filter: string) => void;
   addLog: (log: AuditLog) => void;
 }
 
-const INITIAL_LOGS: AuditLog[] = [
-  {
-    id: '1',
-    type: 'Issued assessment',
-    reference: 'SVC-2026-0417',
-    description: 'Duty & tax notice ASN-2026-0417 · ETB 486,214.00',
-    timestamp: '30 Jul 2026, 11:12',
-  },
-  {
-    id: '2',
-    type: 'Blocked stage',
-    reference: 'SVC-2026-0392',
-    stage: 'Inspection',
-    description: 'Reason: certificate of origin mismatch',
-    timestamp: '30 Jul 2026, 10:40',
-  },
-  {
-    id: '3',
-    type: 'Submitted for approval',
-    reference: 'CUS-10455',
-    description: 'KYC pack — 5 documents',
-    timestamp: '30 Jul 2026, 09:55',
-  },
-  {
-    id: '4',
-    type: 'Requested revision',
-    reference: 'SVC-2026-0431',
-    description: 'Valuation query — unit price 12% below reference',
-    timestamp: '29 Jul 2026, 19:00',
-  },
-  {
-    id: '5',
-    type: 'Returned KYC',
-    reference: 'CUS-10502',
-    description: 'Trade licence expired 2026-06-30',
-    timestamp: '29 Jul 2026, 13:20',
-  },
-];
+type ApiRecord = Record<string, unknown>;
+
+const asRecord = (value: unknown): ApiRecord | null =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as ApiRecord
+    : null;
+
+const readText = (record: ApiRecord, ...keys: string[]): string => {
+  for (const key of keys) {
+    const matchingKey = Object.keys(record).find(
+      (recordKey) => recordKey.toLowerCase() === key.toLowerCase(),
+    );
+    const value = matchingKey ? record[matchingKey] : undefined;
+    if (typeof value === 'string' || typeof value === 'number') {
+      const text = String(value).trim();
+      if (text) return text;
+    }
+  }
+  return '';
+};
+
+const unwrapLogList = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) return value;
+
+  const record = asRecord(value);
+  if (!record) return [];
+
+  for (const key of ['data', 'response', 'payload', 'items', 'results', 'logs', 'assessmentLogs']) {
+    if (record[key] !== undefined) {
+      const list = unwrapLogList(record[key]);
+      if (list.length || Array.isArray(record[key])) return list;
+    }
+  }
+
+  return [];
+};
+
+const normalizeLog = (value: unknown, index: number): AuditLog | null => {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const type = readText(record, 'type', 'action', 'actionType', 'actionName', 'status', 'activityType', 'eventType');
+  const description = readText(record, 'description', 'details', 'message', 'notes', 'reason');
+  const timestamp = readText(record, 'timestamp', 'createdAt', 'createdDate', 'createdOn', 'actionDate', 'eventDate', 'date');
+  const reference = readText(record, 'reference', 'serviceId', 'serviceReference', 'trackingNumber', 'trackingId', 'customerId', 'referenceId');
+  const id = readText(record, 'id', 'logId', 'assessmentLogId') || `${timestamp}-${index}`;
+
+  if (!type && !description) return null;
+
+  return {
+    id,
+    type: type || 'Assessment activity',
+    reference: reference || '—',
+    description: description || type,
+    timestamp: timestamp || '—',
+    stage: readText(record, 'stage', 'stageName', 'serviceStage'),
+  };
+};
+
+const getErrorMessage = (error: unknown): string =>
+  typeof error === 'string' ? error : error instanceof Error ? error.message : 'Failed to load assessment logs.';
 
 export const useAuditStore = create<AuditState>((set) => ({
-  logs: INITIAL_LOGS,
+  logs: [],
+  loading: false,
+  error: null,
   searchQuery: '',
   selectedFilter: 'ALL',
+  fetchLogs: async () => {
+    set({ loading: true, error: null });
+    try {
+      const response = await AssessorEndpoints.getAssessmentLogs();
+      const logs = unwrapLogList(response)
+        .map(normalizeLog)
+        .filter((log): log is AuditLog => log !== null);
+      set({ logs, loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error), loading: false });
+    }
+  },
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setSelectedFilter: (selectedFilter) => set({ selectedFilter }),
   addLog: (log) => set((state) => ({ logs: [log, ...state.logs] })),

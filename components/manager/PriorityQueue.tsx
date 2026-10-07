@@ -58,12 +58,12 @@ export const PriorityQueue: React.FC<PriorityQueueProps> = ({ items }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-      <div className="p-5 border-b border-slate-100">
+    <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+      <div className="border-b border-slate-100 p-4">
         <h3 className="text-sm font-bold text-slate-800">
           Priority queue
         </h3>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="mt-1 text-xs text-slate-500">
           Sorted by risk channel and time in stage
         </p>
       </div>
@@ -72,26 +72,25 @@ export const PriorityQueue: React.FC<PriorityQueueProps> = ({ items }) => {
         {items.map((item, idx) => (
           <div
             key={idx}
-            className="p-4 hover:bg-slate-50/50 transition-colors cursor-pointer"
+            className="cursor-pointer p-3 transition-colors hover:bg-slate-50/50"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
                 <p className="text-sm font-semibold text-blue-600 hover:text-blue-700">
                   {item.id}
                 </p>
-                <p className="text-sm text-slate-700 mt-1 font-medium">
+                <p className="mt-1 text-sm font-medium text-slate-700">
                   {item.title}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="mt-1 text-xs text-slate-500">
                   {item.description}
                 </p>
 
-                {/* Tags */}
-                <div className="flex flex-wrap gap-2 mt-2.5">
+                <div className="mt-2.5 flex flex-wrap gap-2">
                   {item.tags.map((tag, tagIdx) => (
                     <span
                       key={tagIdx}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getTagColor(
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getTagColor(
                         tag.color
                       )}`}
                     >
@@ -102,8 +101,8 @@ export const PriorityQueue: React.FC<PriorityQueueProps> = ({ items }) => {
                 </div>
               </div>
 
-              <div className="text-right flex-shrink-0">
-                <p className="text-xs text-slate-500 font-medium">
+              <div className="shrink-0 text-right">
+                <p className="text-[11px] font-medium text-slate-500">
                   {item.updatedTime}
                 </p>
               </div>

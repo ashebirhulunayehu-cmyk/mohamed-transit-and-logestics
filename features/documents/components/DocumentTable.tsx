@@ -3,11 +3,41 @@
 import React from "react";
 import { useDocumentStore } from "../document.store";
 import { DocumentStatusBadge } from "./DocumentStatusBadge";
-import { FileText, Eye, MoreHorizontal } from "lucide-react";
+import { FileText, Download, CheckCheck, Trash2 } from "lucide-react";
 
 export function DocumentTable() {
-  const getFilteredDocuments = useDocumentStore((state) => state.getFilteredDocuments);
+  const {
+    getFilteredDocuments,
+    verifyDocumentById,
+    removeDocument,
+    downloadFile,
+    loading,
+  } = useDocumentStore();
   const filteredData = getFilteredDocuments();
+
+  const handleDownload = async (row: { id: string; name: string }) => {
+    const file = await downloadFile(row.id);
+    if (!(file instanceof Blob)) {
+      throw new Error("The document endpoint did not return a file.");
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = row.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  };
+
+  const handleVerify = async (row: { id: string }) => {
+    await verifyDocumentById({ documentId: row.id, isVerified: true, notes: "Approved by review" });
+  };
+
+  const handleDelete = async (row: { id: string }) => {
+    await removeDocument(row.id);
+  };
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -25,7 +55,19 @@ export function DocumentTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs">
-            {filteredData.map((row) => (
+            {loading && filteredData.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
+                  Loading documents...
+                </td>
+              </tr>
+            ) : filteredData.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
+                  No documents found.
+                </td>
+              </tr>
+            ) : filteredData.map((row) => (
               <tr key={row.id} className="hover:bg-slate-50/60 transition-colors">
                 <td className="py-3.5 px-4">
                   <div className="flex items-center gap-2.5">
@@ -49,11 +91,33 @@ export function DocumentTable() {
                 </td>
                 <td className="py-3.5 px-4 text-right">
                   <div className="flex items-center justify-end gap-1 text-slate-400">
-                    <button className="p-1.5 hover:bg-slate-100 rounded-md hover:text-slate-700 transition-colors" title="View">
-                      <Eye className="w-4 h-4" />
+                    <button
+                      type="button"
+                      onClick={() => void handleDownload(row).catch(() => undefined)}
+                      disabled={loading}
+                      className="rounded-md p-1.5 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                      title="Download document"
+                      aria-label={`Download ${row.name}`}
+                    >
+                      <Download className="h-4 w-4" />
                     </button>
-                    <button className="p-1.5 hover:bg-slate-100 rounded-md hover:text-slate-700 transition-colors" title="More">
-                      <MoreHorizontal className="w-4 h-4" />
+                    <button
+                      type="button"
+                      onClick={() => void handleVerify(row).catch(() => undefined)}
+                      disabled={loading}
+                      className="p-1.5 hover:bg-emerald-50 rounded-md hover:text-emerald-700 transition-colors"
+                      title="Verify"
+                    >
+                      <CheckCheck className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(row).catch(() => undefined)}
+                      disabled={loading}
+                      className="p-1.5 hover:bg-rose-50 rounded-md hover:text-rose-700 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </td>

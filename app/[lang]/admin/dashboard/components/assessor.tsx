@@ -195,11 +195,18 @@ export default function AssessorDashboardPage() {
   ];
 
   const complianceRows = complianceIssues.length
-    ? complianceIssues.map((issue) => {
+    ? complianceIssues.map((issue, index) => {
         const record = issue as Record<string, unknown>;
+        const label = getIssueText(record, 'title', getIssueText(record, 'name', 'Compliance issue'));
+        const key = [
+          record.id ?? record.caseId ?? record.serviceId ?? record.referenceId ?? record.title ?? record.name ?? 'compliance-issue',
+          record.count ?? record.severity ?? index,
+          index,
+        ].join('-');
 
         return {
-          label: getIssueText(record, 'title', getIssueText(record, 'name', 'Compliance issue')),
+          key,
+          label,
           count: getIssueText(record, 'count', getIssueText(record, 'severity', 'Open')),
           tone: getIssueText(record, 'severity', 'Low').toLowerCase(),
         };
@@ -376,12 +383,12 @@ export default function AssessorDashboardPage() {
             </div>
 
             <div className="mt-6 space-y-4">
-              {complianceRows.length ? complianceRows.map(({ label, count, tone }) => {
+              {complianceRows.length ? complianceRows.map(({ key, label, count, tone }) => {
                 const width = tone === 'high' ? 'w-[72%]' : tone === 'medium' ? 'w-[48%]' : tone === 'low' ? 'w-[20%]' : 'w-[32%]';
                 const color = tone === 'high' ? 'bg-red-500' : tone === 'medium' ? 'bg-amber-500' : tone === 'low' ? 'bg-emerald-500' : 'bg-blue-500';
 
                 return (
-                  <div key={label}>
+                  <div key={key}>
                     <div className="mb-1.5 flex items-center justify-between">
                       <span className="text-sm font-medium text-slate-600">{label}</span>
                       <span className="text-sm font-semibold text-slate-900">{count}</span>

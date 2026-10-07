@@ -1,13 +1,27 @@
 "use client";
 
 import React from "react";
+import { useEffect } from "react";
 import { useServiceReviewStore } from "../serviceReview.store";
 import { Search, Lock, Clock } from "lucide-react";
 import { CaseStatusTag } from "../serviceReview.types";
 
 export function ServiceReviewQueue() {
-  const { cases, selectedCaseId, setSelectedCaseId, searchTerm, setSearchTerm } =
-    useServiceReviewStore();
+  const {
+    cases,
+    selectedCaseId,
+    setSelectedCaseId,
+    searchTerm,
+    setSearchTerm,
+    fetchCases,
+    loading,
+    error,
+    reviewedService,
+  } = useServiceReviewStore();
+
+  useEffect(() => {
+    void fetchCases();
+  }, [fetchCases]);
 
   const filteredCases = cases.filter(
     (c) =>
@@ -62,8 +76,20 @@ export function ServiceReviewQueue() {
         </div>
       </div>
 
+      {reviewedService && (
+        <p role="status" className="border-b border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
+          Review saved for {reviewedService.trackingNumber} (service #{reviewedService.id}).
+        </p>
+      )}
+
       <div className="divide-y divide-slate-100">
-        {filteredCases.map((item) => (
+        {error ? (
+          <p role="alert" className="p-5 text-sm text-red-700">{error}</p>
+        ) : loading && cases.length === 0 ? (
+          <p className="p-5 text-sm text-slate-500">Loading service reviews...</p>
+        ) : filteredCases.length === 0 ? (
+          <p className="p-5 text-sm text-slate-500">No pending service reviews.</p>
+        ) : filteredCases.map((item) => (
           <div
             key={item.id}
             onClick={() => setSelectedCaseId(item.id)}

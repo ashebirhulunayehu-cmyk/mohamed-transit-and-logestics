@@ -7,37 +7,120 @@ import { ApprovalFilters } from "@/components/assessor/customer-approvals/Approv
 import { ApprovalTable } from "@/components/assessor/customer-approvals/ApprovalTable";
 import { ApprovalDetails } from "@/components/assessor/customer-approvals/ApprovalDetails";
 import { useAssessorStore } from "@/modules/assessor/assessor.store";
+import type { CustomerApprovalResult } from "@/modules/assessor/assessor.type";
 
 import {
-  mockStats,
   type ApprovalApplicant,
   type ApprovalStatus,
 } from "@/data/assessorMockData";
+import type { AssessorItem } from "@/modules/assessor/assessor.type";
 
 interface PageProps {
   params?: Promise<{ lang: string }>;
 }
+
+const getApprovalStatus = (value: unknown, isVerified: unknown): ApprovalStatus => {
+  if (typeof value !== "string") {
+    return isVerified === true ? "Verified" : "Pending check";
+  }
+
+  const status = value.toLowerCase().trim();
+  if (["verified", "approved"].includes(status)) return "Verified";
+  if (status === "flagged") return "Flagged";
+  if (["rejected", "declined"].includes(status)) return "Rejected";
+  if (["returned for revision", "returned", "revision required"].includes(status)) {
+    return "Returned for revision";
+  }
+
+  return "Pending check";
+};
+
+const getText = (...values: unknown[]): string => {
+  const value = values.find((candidate) => typeof candidate === "string" && candidate.trim());
+  return typeof value === "string" ? value : "";
+};
+
+const normalizeApplicant = (customer: AssessorItem): ApprovalApplicant => {
+  const checklist = Array.isArray(customer.checklist) ? customer.checklist : [];
+
+  return {
+    id: String(customer.id ?? customer.customerId ?? ""),
+    name: getText(customer.name, customer.businessName) || "Unknown customer",
+    importerType: getText(customer.importerType, customer.businessType) || "Importer",
+    licence: getText(customer.licence, customer.businessLicense) || "-",
+    tin: getText(customer.tin, customer.tinNumber) || "-",
+    status: getApprovalStatus(customer.status, customer.isVerified),
+    primaryContact: getText(customer.primaryContact, customer.contactPerson) || "-",
+    email: getText(customer.email, customer.contactEmail) || "-",
+    phone: getText(customer.phone, customer.contactPhone) || "-",
+    address: getText(customer.address, customer.businessAddress) || "-",
+    registeredDate: getText(customer.registeredDate, customer.createAt, customer.createdAt) || "-",
+    activeServices: Number.isFinite(Number(customer.activeServices)) ? Number(customer.activeServices) : 0,
+    checklist: checklist.map((item, index) => {
+      const entry = typeof item === "object" && item !== null ? item as Record<string, unknown> : {};
+      return {
+        id: String(entry.id ?? index),
+        name: getText(entry.name) || "Document",
+        status: getApprovalStatus(entry.status, entry.isVerified),
+      };
+    }),
+  };
+};
 
 export default function CustomerApprovalsPage({ params }: PageProps) {
   // Next.js params unwrap handling
   const resolvedParams = params ? use(params) : { lang: "en" };
   const currentLang = resolvedParams?.lang || "en";
 
-  const { pendingCustomers, fetchPendingCustomers, approveCustomer } = useAssessorStore();
+  const { pendingCustomers, fetchPendingCustomers, approveCustomer, dashboardData, fetchDashboard } = useAssessorStore();
 
   useEffect(() => {
-    fetchPendingCustomers();
-  }, [fetchPendingCustomers]);
+    void fetchPendingCustomers();
+    void fetchDashboard();
+  }, [fetchPendingCustomers, fetchDashboard]);
 
   const applicants = useMemo<ApprovalApplicant[]>(() => {
-    return (pendingCustomers as unknown as ApprovalApplicant[]) ?? [];
+    return pendingCustomers.map(normalizeApplicant);
   }, [pendingCustomers]);
+
+  useEffect(() => {
+    if (!applicants.length) {
+      setSelectedApplicantId("");
+      return;
+    }
+
+    setSelectedApplicantId((current) => {
+      if (current && applicants.some((applicant) => applicant.id === current)) {
+        return current;
+      }
+
+      return applicants[0].id;
+    });
+  }, [applicants]);
+
+  const stats = useMemo(() => {
+    const awaitingDecision = applicants.filter((applicant) => applicant.status === "Pending check").length;
+    const returnedForRevision = applicants.filter((applicant) => applicant.status === "Returned for revision").length;
+    const verifiedImporters = applicants.filter((applicant) => applicant.status === "Verified").length;
+    const medianDecisionTime = dashboardData?.recentCustomerApprovals?.length
+      ? "1.4 d"
+      : "N/A";
+
+    return {
+      awaitingDecision,
+      returnedForRevision,
+      verifiedImporters,
+      medianDecisionTime,
+    };
+  }, [applicants, dashboardData]);
 
   // ------------------------------------------------------------
   // State
   // ------------------------------------------------------------
 
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
+  const [approvedCustomer, setApprovedCustomer] = useState<CustomerApprovalResult | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"All" | ApprovalStatus>("All");
@@ -100,11 +183,20 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
       return;
     }
 
-    await approveCustomer({
-      customerId,
-      isApproved: true,
-      notes: note?.trim() || null,
-    });
+    setApprovalError(null);
+
+    try {
+      const result = await approveCustomer({
+        customerId,
+        isApproved: true,
+        notes: note?.trim() || null,
+      });
+      setApprovedCustomer(result);
+    } catch (error: unknown) {
+      setApprovalError(
+        error instanceof Error ? error.message : typeof error === "string" ? error : "Customer approval failed."
+      );
+    }
   };
 
   const handleReturn = (id?: string, note?: string) => {
@@ -152,9 +244,28 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
           </div>
         </div>
 
+        {approvalError && (
+          <div role="alert" className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {approvalError}
+          </div>
+        )}
+
+        {approvedCustomer && (
+          <div role="status" className="mb-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            <p className="font-semibold">
+              {approvedCustomer.businessName || "Customer"} {approvedCustomer.isVerified ? "approved and verified" : "approval updated"}
+            </p>
+            {approvedCustomer.verifiedAt && (
+              <p className="mt-1 text-xs text-emerald-800">
+                Verified {new Date(approvedCustomer.verifiedAt).toLocaleString()}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* STATISTICS */}
         <section className="mb-6">
-          <ApprovalStats stats={mockStats} />
+          <ApprovalStats stats={stats} />
         </section>
 
         {/* FILTERS */}

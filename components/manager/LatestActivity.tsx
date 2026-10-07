@@ -70,8 +70,8 @@ export const LatestActivity: React.FC<LatestActivityProps> = ({ items }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-      <div className="p-5 border-b border-slate-100">
+    <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+      <div className="border-b border-slate-100 p-4">
         <h3 className="text-sm font-bold text-slate-800">Latest activity</h3>
       </div>
 
@@ -79,23 +79,21 @@ export const LatestActivity: React.FC<LatestActivityProps> = ({ items }) => {
         {items.map((item, idx) => (
           <div
             key={idx}
-            className="p-4 hover:bg-slate-50/50 transition-colors"
+            className="p-3 transition-colors hover:bg-slate-50/50"
           >
             <div className="flex gap-3">
-              {/* Icon */}
               {getActivityIcon(item.type)}
 
-              {/* Content */}
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-semibold text-slate-900">
                     {item.title}
                   </p>
-                  <p className="text-xs text-slate-500 font-medium flex-shrink-0">
+                  <p className="shrink-0 text-[11px] font-medium text-slate-500">
                     {item.timestamp}
                   </p>
                 </div>
-                <p className="text-sm text-slate-600 mt-1">
+                <p className="mt-1 text-sm text-slate-600">
                   {item.description}
                 </p>
               </div>

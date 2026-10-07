@@ -14,17 +14,49 @@ import { getTokenClient } from "../token/client-token.storage";
    API Response Type
 ========================================================= */
 
+type ApiError = string | { code?: number; message?: string };
+
 interface ApiResponse<T = unknown> {
   statusCode?: number;
   error?: boolean;
-  errors?: string[] | Record<string, string[]>;
+  isError?: boolean;
+  errors?: ApiError[] | Record<string, string[]>;
   message?: string;
-  payload?: T;
+  payload?: T | null;
 
   response?: {
     data: T | null;
   };
 }
+
+const getApiErrorMessage = (value?: unknown): string | undefined => {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const data = value as ApiResponse;
+
+  if (Array.isArray(data?.errors)) {
+    const messages = data.errors
+      .map((error) => typeof error === "string" ? error : error.message)
+      .filter((message): message is string => Boolean(message?.trim()));
+
+    if (messages.length) {
+      return messages.join(", ");
+    }
+  } else if (data?.errors) {
+    const messages = Object.entries(data.errors)
+      .flatMap(([field, errors]) => errors.map((message) => `${field}: ${message}`));
+
+    if (messages.length) {
+      return messages.join(" | ");
+    }
+  }
+
+  return data?.message?.trim() || undefined;
+};
 
 /* =========================================================
    Axios Instance
@@ -112,7 +144,13 @@ service.interceptors.response.use(
       );
     }
 
-    if (response.status === 200 || response.status === 201 || data?.statusCode === 200) {
+    if (data?.error || data?.isError) {
+      return Promise.reject(getApiErrorMessage(data) || "The request failed.");
+    }
+
+    const isSuccessfulStatus = [200, 201, 202, 204, 304].includes(response.status);
+
+    if (isSuccessfulStatus || data?.statusCode === 200 || data?.statusCode === 201 || data?.statusCode === 204) {
       if (data?.response?.data !== undefined) {
         return data.response.data as unknown as AxiosResponse<ApiResponse>;
       }
@@ -146,21 +184,16 @@ service.interceptors.response.use(
         return Promise.reject("Unauthorized access");
       }
 
-      if (status === 404) {
-        errorMessage = `Server Error: 404 Not Found (${error.config?.baseURL || ""}${error.config?.url || ""})`;
-      } else if (data?.errors) {
-        if (typeof data.errors === "object" && !Array.isArray(data.errors)) {
-          const validationMessages = Object.entries(data.errors)
-            .map(([field, messages]) => `${field}: ${(messages as string[]).join(", ")}`)
-            .join(" | ");
+      const apiErrorMessage = getApiErrorMessage(data);
 
-          console.error("📋 Detailed Validation Errors:", data.errors);
-          errorMessage = validationMessages;
-        } else if (Array.isArray(data.errors)) {
-          errorMessage = data.errors.join(", ");
-        }
-      } else if (data?.message) {
-        errorMessage = data.message;
+      if (status === 304) {
+        return Promise.resolve((error.response?.data ?? {}) as ApiResponse);
+      }
+
+      if (apiErrorMessage) {
+        errorMessage = apiErrorMessage;
+      } else if (status === 404) {
+        errorMessage = `Server Error: 404 Not Found (${error.config?.baseURL || ""}${error.config?.url || ""})`;
       } else {
         const errorData = data as { title?: string } | undefined;
 

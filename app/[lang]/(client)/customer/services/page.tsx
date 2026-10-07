@@ -1,11 +1,10 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { Filter, Search, SlidersHorizontal, Download } from "lucide-react";
-import { CustomerPageHeader } from "@/features/customer/components/CustomerPageHeader";
-import { CustomerShell } from "@/features/customer/components/CustomerShell";
-import { CustomerStatusBadge } from "@/features/customer/components/CustomerStatusBadge";
-import { customerServices } from "@/features/customer/customer.data";
-
-export default function CustomerServicesPage() {
-  return <CustomerShell><CustomerPageHeader eyebrow="Case register" title="My services" description="Track every import case you have with the directorate, stage by stage." /><main className="mx-auto max-w-[1100px] p-5 sm:p-7"><section className="overflow-hidden rounded border border-slate-200 bg-white shadow-sm"><div className="flex flex-wrap gap-2 border-b border-slate-200 p-3"><label className="relative min-w-[220px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><input className="h-9 w-full rounded border border-slate-200 pl-9 text-sm outline-none focus:border-cyan-500" placeholder="Search by service ID, reference..." /></label><button className="inline-flex h-9 items-center gap-2 rounded border border-slate-200 px-3 text-xs font-medium"><Filter className="h-4 w-4" /> All statuses</button><button className="inline-flex h-9 items-center gap-2 rounded border border-slate-200 px-3 text-xs font-medium">All modes</button><button className="inline-flex h-9 items-center gap-2 rounded border border-slate-200 px-3 text-xs font-medium"><SlidersHorizontal className="h-4 w-4" /> Columns</button><button className="inline-flex h-9 items-center gap-2 rounded border border-slate-200 px-3 text-xs font-medium"><Download className="h-4 w-4" /> Export</button></div><div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-xs"><thead className="border-b border-slate-200 text-[11px] uppercase text-slate-500"><tr>{["Service", "Mode", "Status", "Risk", "Case executor", "ETA", "SLA", "Updated"].map((heading) => <th key={heading} className="px-3 py-4 font-semibold">{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{customerServices.map((service) => <tr key={service.id}><td className="px-3 py-4"><p className="font-mono font-semibold text-blue-700">{service.id}</p><p className="mt-1 text-slate-500">{service.title}</p></td><td className="px-3 py-4 text-slate-500">{service.mode}</td><td className="px-3 py-4"><CustomerStatusBadge status={service.status} /></td><td className="px-3 py-4"><span className={`rounded border px-2 py-1 text-[11px] font-semibold ${service.channel === "Green channel" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>{service.channel}</span></td><td className="px-3 py-4 text-slate-600">{service.executor}</td><td className="px-3 py-4 text-slate-600">{service.eta}</td><td className="px-3 py-4 font-semibold text-amber-700">{service.sla}</td><td className="px-3 py-4 text-slate-500">{service.updated}</td></tr>)}</tbody></table></div><div className="border-t border-slate-200 px-3 py-4 text-xs text-slate-500">Showing 2 of 2 services</div></section></main></CustomerShell>;
+export default async function CustomerServicesPage({
+  params,
+}: {
+  params: Promise<{ lang: string }>;
+}) {
+  const { lang } = await params;
+  redirect(`/${lang}/customer/dashboard?view=shipments`);
 }

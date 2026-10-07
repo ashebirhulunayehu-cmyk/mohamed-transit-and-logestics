@@ -18,5 +18,7 @@ export interface Conversation {
   unreadCount: number;
   type: "All" | "Groups" | "Direct";
   participants: string[];
+  serviceId?: string | number;
+  recipientUserId?: string | number;
   messages: Message[];
 }

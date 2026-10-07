@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Lock, Eye, EyeOff, CheckCircle2, KeyRound, ArrowLeft } from "lucide-react";
@@ -24,7 +24,7 @@ const resetPasswordSchema = z
 
 type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -32,8 +32,9 @@ export default function ResetPasswordPage() {
   const lang = (params.lang as "am" | "en") || "am";
   const isAm = lang === "am";
   const token = searchParams.get("token") || "";
+  const email = searchParams.get("email") || "";
 
-  const { resetPassword, loading, error: storeError } = useAuthStore();
+  const { resetPasswordFromEmail, loading, error: storeError } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -49,16 +50,16 @@ export default function ResetPasswordPage() {
   const onSubmit = async (data: ResetPasswordFormData) => {
     setLocalError(null);
 
-    if (!token) {
-      setLocalError(isAm ? "ትክክለኛ ያልሆነ Token ነው" : "Invalid or missing token");
+    if (!token || !email) {
+      setLocalError(isAm ? "የማስተካከያ ሊንኩ ትክክለኛ አይደለም" : "Invalid or missing reset link details");
       return;
     }
 
     try {
-      await resetPassword({
+      await resetPasswordFromEmail({
         token,
+        email,
         newPassword: data.password,
-        confirmPassword: data.confirmPassword,
       });
       setIsSuccess(true);
       setTimeout(() => {
@@ -179,5 +180,13 @@ export default function ResetPasswordPage() {
         </form>
       )}
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto w-full max-w-2xl rounded-3xl bg-white/90 p-8 text-center text-sm text-slate-500 shadow-2xl">Loading password reset form...</div>}>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }

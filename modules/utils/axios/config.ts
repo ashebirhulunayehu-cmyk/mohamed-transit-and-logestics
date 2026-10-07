@@ -1,4 +1,4 @@
-const normalizeApiBaseUrl = (input: string | undefined) => {
+export const normalizeApiBaseUrl = (input: string | undefined) => {
   const fallback = "http://localhost:5254/api/v1";
   const rawValue = (input || fallback).trim().replace(/\/+$/, "");
 
