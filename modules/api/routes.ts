@@ -31,13 +31,17 @@ export const API_ROUTES = {
     create: "/RolePrivilege/Create",
     getAll: "/RolePrivilege/GetAll",
   },
+  account: {
+    getProfile: "/Account/GetProfile",
+    updateProfile: "/Account/UpdateProfile",
+  },
   seeder: {
     seed: "/Seeder/seed",
   },
   assessor: {
     getPendingCustomerApprovals: "/Assessor/GetPendingCustomerApprovals",
     approveCustomer: "/Assessor/ApproveCustomer",
-    getPendingServices: "/Assessor/GetPendingServices",
+    getPendingServices: "/Assessor/GetPendingServiceReviews",
     getPendingServiceReviews: "/Assessor/GetPendingServiceReviews",
     reviewService: "/Assessor/ReviewService",
     getServicesUnderOversight: "/Assessor/GetServicesUnderOversight",

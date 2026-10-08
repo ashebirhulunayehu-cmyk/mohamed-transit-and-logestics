@@ -21,7 +21,10 @@ export type DataEncoderDashboardMetric =
 	| "pendingCustomerApprovals"
 	| "totalServicesCreated"
 	| "pendingServiceApprovals"
-	| "draftServices";
+	| "draftServices"
+	| "openCases"
+	| "dueWithin48Hours"
+	| "clearedThisMonth";
 
 const DASHBOARD_METRICS: DataEncoderDashboardMetric[] = [
 	"totalCustomersCreated",
@@ -29,6 +32,9 @@ const DASHBOARD_METRICS: DataEncoderDashboardMetric[] = [
 	"totalServicesCreated",
 	"pendingServiceApprovals",
 	"draftServices",
+	"openCases",
+	"dueWithin48Hours",
+	"clearedThisMonth",
 ];
 
 const EMPTY_DASHBOARD: DataEncoderDashboardSummary = {
@@ -37,6 +43,9 @@ const EMPTY_DASHBOARD: DataEncoderDashboardSummary = {
 	totalServicesCreated: 0,
 	pendingServiceApprovals: 0,
 	draftServices: 0,
+	openCases: undefined,
+	dueWithin48Hours: undefined,
+	clearedThisMonth: undefined,
 	recentCustomers: [],
 	recentServices: [],
 };
@@ -70,6 +79,15 @@ const metricAliases: Record<DataEncoderDashboardMetric, string[]> = {
 	draftServices: [
 		"draftServices", "totalDraftServices", "draftServiceCount", "serviceDrafts",
 		"draftCount", "savedServiceDrafts", "unsubmittedServices", "unsubmittedServiceCount",
+	],
+	openCases: ["openCases", "activeCases", "openServiceCases", "activeServiceCases"],
+	dueWithin48Hours: [
+		"dueWithin48Hours", "dueIn48Hours", "servicesDueWithin48Hours",
+		"casesDueWithin48Hours", "dueSoon",
+	],
+	clearedThisMonth: [
+		"clearedThisMonth", "completedThisMonth", "servicesClearedThisMonth",
+		"casesClearedThisMonth", "monthlyCompletedServices",
 	],
 };
 
@@ -130,8 +148,22 @@ const normalizeDashboard = (
 		totalServicesCreated: counts.totalServicesCreated ?? 0,
 		pendingServiceApprovals: counts.pendingServiceApprovals ?? 0,
 		draftServices: counts.draftServices ?? 0,
-		recentCustomers: readArray<DataEncoderRecentCustomer>(record, ["recentCustomers", "latestCustomers"]),
-		recentServices: readArray<DataEncoderRecentService>(record, ["recentServices", "latestServices"]),
+		openCases: counts.openCases,
+		dueWithin48Hours: counts.dueWithin48Hours,
+		clearedThisMonth: counts.clearedThisMonth,
+		recentCustomers: readArray<Record<string, unknown>>(record, [
+			"recentCustomers",
+			"latestCustomers",
+			"recentCustomerRecords",
+			"customerRecords",
+		]).map(normalizeRecentCustomer),
+		recentServices: readArray<Record<string, unknown>>(record, [
+			"recentServices",
+			"latestServices",
+			"recentServiceRecords",
+			"serviceRecords",
+			"services",
+		]).map(normalizeRecentService),
 	};
 
 	return { dashboardData, unavailableMetrics };
@@ -180,8 +212,20 @@ const readRelatedName = (value: unknown): string => {
 	return readText(value, ["businessName", "companyName", "importerName", "fullName", "name"]);
 };
 
+const readNoteValue = (notes: string, label: string): string => {
+	const line = notes.split(/\r?\n/).find((entry) =>
+		entry.trim().toLowerCase().startsWith(`${label.toLowerCase()}:`),
+	);
+	return line ? line.slice(line.indexOf(":") + 1).trim() : "";
+};
+
 const normalizeRecentService = (record: Record<string, unknown>): DataEncoderRecentService => {
 	const importer = findValue(record, ["importer", "customer"]);
+	const notes = readText(record, ["notes", "serviceNotes"]);
+	const noteImporter = readNoteValue(notes, "Importer").replace(/\s*\(TIN:.*\)\s*$/i, "");
+	const noteDescription = readNoteValue(notes, "Goods description");
+	const noteRoute = readNoteValue(notes, "Route category");
+	const noteOrigin = readNoteValue(notes, "Country of origin");
 	const serviceDate = readText(record, [
 		"updatedAt",
 		"lastUpdateDate",
@@ -195,37 +239,73 @@ const normalizeRecentService = (record: Record<string, unknown>): DataEncoderRec
 		"itemDescription",
 		"serviceDescription",
 		"goodsDescription",
-	]);
+		"commodity",
+	]) || noteDescription;
 	const importerName =
 		readText(record, ["importerName", "customerName", "businessName", "companyName"]) ||
-		readRelatedName(importer);
+		readRelatedName(importer) ||
+		noteImporter;
 
 	return {
 		...record,
 		id: readIdentifier(record, ["id", "serviceId"]),
-		trackingNumber: readText(record, ["trackingNumber", "serviceNumber", "referenceNumber"]),
-		serviceNumber: readText(record, ["serviceNumber", "trackingNumber", "referenceNumber"]),
+		trackingNumber: readText(record, [
+			"trackingNumber",
+			"trackingId",
+			"trackingNo",
+			"serviceNumber",
+			"referenceNumber",
+			"reference",
+			"billOfLading",
+		]),
+		serviceNumber: readText(record, [
+			"serviceNumber",
+			"trackingNumber",
+			"trackingId",
+			"trackingNo",
+			"referenceNumber",
+			"reference",
+			"billOfLading",
+		]),
 		description,
 		itemDescription: description,
 		importerName,
+		importerId: readIdentifier(record, ["importerId", "customerId"]),
 		importer,
-		status: readStatus(record),
+		notes,
+		origin: readText(record, ["origin", "originName", "countryOfOrigin"]) || noteOrigin,
+		destination: readText(record, ["destination", "destinationName", "routeCategory"]) || noteRoute,
+		status: readStatus(record) ?? readIdentifier(record, ["statusName", "reviewStatus", "submissionStatus"]),
+		riskLevel: readText(record, ["riskLevel", "riskChannel", "riskCategory", "channel"]),
 		updatedAt: serviceDate,
 		createdDate: readText(record, ["createdDate", "createdAt", "createAt"]),
 		createAt: readText(record, ["createAt", "createdAt", "createdDate"]),
 	};
 };
 
-const normalizeRecentCustomer = (record: Record<string, unknown>): DataEncoderRecentCustomer => ({
-	...record,
-	id: readIdentifier(record, ["id", "customerId"]),
-	name: readText(record, ["name", "businessName", "companyName"]),
-	businessName: readText(record, ["businessName", "companyName", "name"]),
-	email: readText(record, ["email", "contactEmail"]),
-	registeredDate: readText(record, ["registeredDate", "registrationDate", "createdAt", "createAt"]),
-	createdDate: readText(record, ["createdDate", "createdAt", "createAt"]),
-	createAt: readText(record, ["createAt", "createdAt", "createdDate"]),
-});
+const normalizeRecentCustomer = (record: Record<string, unknown>): DataEncoderRecentCustomer => {
+	const verified = findValue(record, ["isVerified", "verified", "isApproved", "approved"]);
+	return {
+		...record,
+		id: readIdentifier(record, ["id", "customerId"]),
+		name: readText(record, ["name", "businessName", "companyName", "customerName"]),
+		businessName: readText(record, ["businessName", "companyName", "name", "customerName"]),
+		email: readText(record, ["email", "contactEmail"]),
+		tinNumber: readText(record, ["tinNumber", "tin"]),
+		isVerified:
+			typeof verified === "boolean"
+				? verified
+				: verified === 1 || (typeof verified === "string" && ["1", "true", "yes"].includes(verified.trim().toLowerCase()))
+					? true
+					: verified === 0 || (typeof verified === "string" && ["0", "false", "no"].includes(verified.trim().toLowerCase()))
+						? false
+						: undefined,
+		status: readIdentifier(record, ["status", "approvalStatus", "verificationStatus"]),
+		registeredDate: readText(record, ["registeredDate", "registrationDate", "createdAt", "createAt"]),
+		createdDate: readText(record, ["createdDate", "createdAt", "createAt"]),
+		createAt: readText(record, ["createAt", "createdAt", "createdDate"]),
+	};
+};
 
 const getRecordTimestamp = (record: Record<string, unknown>): number => {
 	const value = readText(record, ["updatedAt", "lastUpdateDate", "modifiedDate", "createAt", "createdAt", "createdDate"]);
@@ -246,6 +326,7 @@ const isPendingService = (record: Record<string, unknown>): boolean => {
 		"approvalStatus",
 		"serviceStatus",
 		"status",
+		"statusName",
 		"reviewStatus",
 		"submissionStatus",
 	].map((field) => readText(record, [field]).toLowerCase()).filter(Boolean);
@@ -270,6 +351,76 @@ const isPendingService = (record: Record<string, unknown>): boolean => {
 	return numericStatus === 1 || numericStatus === 3;
 };
 
+const getServiceStatus = (record: Record<string, unknown>): string => {
+	const status = readText(record, [
+		"approvalStatus", "serviceStatus", "status", "statusName", "reviewStatus", "submissionStatus",
+	]).toLowerCase();
+	if (status === "4") return "completed";
+	if (status === "5") return "blocked";
+	if (status === "3") return "needs review";
+	if (status === "2") return "in progress";
+	if (status === "1") return "pending";
+	return status;
+};
+
+const isOpenService = (record: Record<string, unknown>): boolean | undefined => {
+	const isOpen = findValue(record, ["isOpen", "open"]);
+	if (typeof isOpen === "boolean") return isOpen;
+	const status = getServiceStatus(record);
+	if (!status) return undefined;
+	return ![
+		"approved", "complete", "completed", "cleared", "closed", "rejected", "cancelled", "canceled",
+	].some((terminalStatus) => status.includes(terminalStatus));
+};
+
+const getDueDate = (record: Record<string, unknown>): number | undefined => {
+	const value = readText(record, ["dueDate", "dueAt", "deadline", "expectedCompletionDate"]);
+	if (!value) return undefined;
+	const timestamp = Date.parse(value);
+	return Number.isNaN(timestamp) ? undefined : timestamp;
+};
+
+const getClearedDate = (record: Record<string, unknown>): number | undefined => {
+	const value = readText(record, [
+		"clearedAt", "clearanceDate", "completedAt", "completionDate", "completedDate",
+	]);
+	if (!value) return undefined;
+	const timestamp = Date.parse(value);
+	return Number.isNaN(timestamp) ? undefined : timestamp;
+};
+
+const deriveOpenCases = (services: Record<string, unknown>[]): number | undefined => {
+	const values = services.map(isOpenService);
+	return values.some((value) => value !== undefined)
+		? values.filter((value) => value === true).length
+		: undefined;
+};
+
+const deriveDueWithin48Hours = (services: Record<string, unknown>[], now: number): number | undefined => {
+	const dueDates = services.map(getDueDate).filter((date): date is number => date !== undefined);
+	if (dueDates.length === 0) return undefined;
+	const cutoff = now + 48 * 60 * 60 * 1000;
+	return dueDates.filter((date) => date >= now && date <= cutoff).length;
+};
+
+const deriveClearedThisMonth = (services: Record<string, unknown>[], now: Date): number | undefined => {
+	const statuses = services.map(getServiceStatus);
+	if (statuses.every((status) => !status)) return undefined;
+	const cleared = services
+		.map((service, index) => ({ service, status: statuses[index] }))
+		.filter(({ status }) =>
+			["approved", "complete", "completed", "cleared"].some((value) => status.includes(value)),
+		);
+	if (cleared.some(({ service }) => getClearedDate(service) === undefined)) return undefined;
+
+	return cleared.filter(({ service }) => {
+		const date = getClearedDate(service);
+		if (date === undefined) return false;
+		const clearedAt = new Date(date);
+		return clearedAt.getFullYear() === now.getFullYear() && clearedAt.getMonth() === now.getMonth();
+	}).length;
+};
+
 const applyRecordFallbacks = async (
 	dashboardData: DataEncoderDashboardSummary,
 	unavailableMetrics: DataEncoderDashboardMetric[],
@@ -281,20 +432,41 @@ const applyRecordFallbacks = async (
 	const nextData = { ...dashboardData };
 	const missing = new Set(unavailableMetrics);
 	const fallbackErrors: string[] = [];
+	const customerNames = new Map<string, string>();
+	for (const customer of nextData.recentCustomers) {
+		if (customer.id !== undefined) {
+			const name = readText(customer, ["businessName", "name"]);
+			if (name) customerNames.set(String(customer.id), name);
+		}
+	}
 	const needsCustomers =
 		missing.has("totalCustomersCreated") ||
 		missing.has("pendingCustomerApprovals") ||
 		nextData.recentCustomers.length === 0;
+	const needsServices =
+		missing.has("totalServicesCreated") ||
+		missing.has("pendingServiceApprovals") ||
+		missing.has("openCases") ||
+		missing.has("dueWithin48Hours") ||
+		missing.has("clearedThisMonth") ||
+		nextData.recentServices.length === 0;
 	const [customerResult, serviceResult] = await Promise.all([
 		needsCustomers
 			? DataEncoderEndpoints.getAllCustomers("1").then((value) => ({ value })).catch((error: unknown) => ({ error }))
 			: Promise.resolve(null),
-		DataEncoderEndpoints.getServices().then((value) => ({ value })).catch((error: unknown) => ({ error })),
+		needsServices
+			? DataEncoderEndpoints.getServices().then((value) => ({ value })).catch((error: unknown) => ({ error }))
+			: Promise.resolve(null),
 	]);
 
 	if (customerResult && "value" in customerResult) {
 		try {
 			const customers = unwrapRecords(customerResult.value, ["items", "customers", "records", "rows"]);
+			for (const customer of customers) {
+				const id = readIdentifier(customer, ["id", "customerId"]);
+				const name = readText(customer, ["businessName", "companyName", "name"]);
+				if (id !== undefined && name) customerNames.set(String(id), name);
+			}
 			if (missing.has("totalCustomersCreated")) {
 				nextData.totalCustomersCreated = customers.length;
 				missing.delete("totalCustomersCreated");
@@ -319,14 +491,35 @@ const applyRecordFallbacks = async (
 	if (serviceResult && "value" in serviceResult) {
 		try {
 			const services = unwrapRecords(serviceResult.value, ["items", "services", "records", "servicelist", "rows"]);
-			nextData.totalServicesCreated = services.length;
-			nextData.pendingServiceApprovals = services.filter(isPendingService).length;
+			if (missing.has("totalServicesCreated")) {
+				nextData.totalServicesCreated = services.length;
+			}
+			if (missing.has("pendingServiceApprovals")) {
+				nextData.pendingServiceApprovals = services.filter(isPendingService).length;
+			}
+			if (missing.has("openCases")) {
+				nextData.openCases = deriveOpenCases(services);
+				if (nextData.openCases !== undefined) missing.delete("openCases");
+			}
+			if (missing.has("dueWithin48Hours")) {
+				nextData.dueWithin48Hours = deriveDueWithin48Hours(services, Date.now());
+				if (nextData.dueWithin48Hours !== undefined) missing.delete("dueWithin48Hours");
+			}
+			if (missing.has("clearedThisMonth")) {
+				nextData.clearedThisMonth = deriveClearedThisMonth(services, new Date());
+				if (nextData.clearedThisMonth !== undefined) missing.delete("clearedThisMonth");
+			}
 			if (nextData.recentServices.length === 0) {
 				nextData.recentServices = [...services]
 					.sort((left, right) => getRecordTimestamp(right) - getRecordTimestamp(left))
 					.slice(0, 5)
 					.map(normalizeRecentService);
 			}
+			nextData.recentServices = nextData.recentServices.map((record) => {
+				if (record.importerName || record.importerId === undefined) return record;
+				const importerName = customerNames.get(String(record.importerId));
+				return importerName ? { ...record, importerName } : record;
+			});
 			missing.delete("totalServicesCreated");
 			missing.delete("pendingServiceApprovals");
 		} catch (error: unknown) {

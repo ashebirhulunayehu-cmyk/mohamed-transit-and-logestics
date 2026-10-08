@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { useEffect } from "react";
 import Link from "next/link";
 import {
@@ -16,6 +17,8 @@ import { useAssessorStore } from "@/store/assessorStore";
 import useAuthStore from "@/modules/auth/auth.store";
 import { useNotificationStore } from "@/features/notifications/notification.store";
 
+const subscribeToHydration = () => () => {};
+
 export default function AssessorHeader() {
   const pathname = usePathname();
   const router = useRouter();
@@ -29,6 +32,12 @@ export default function AssessorHeader() {
     toggleMobileSidebar,
   } = useAssessorStore();
   const user = useAuthStore((state) => state.user);
+  const hasHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false,
+  );
+  const displayUser = hasHydrated ? user : null;
   const logout = useAuthStore((state) => state.logout);
   const notifications = useNotificationStore((state) => state.notifications);
   const unreadCount = useNotificationStore((state) => state.unreadCount);
@@ -37,7 +46,7 @@ export default function AssessorHeader() {
   const fetchNotifications = useNotificationStore((state) => state.fetchNotifications);
   const fetchUnreadCount = useNotificationStore((state) => state.fetchUnreadCount);
   const markAsRead = useNotificationStore((state) => state.markAsRead);
-  const userName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.username || user?.email?.split("@")[0] || roleLabel;
+  const userName = [displayUser?.firstName, displayUser?.lastName].filter(Boolean).join(" ") || displayUser?.username || displayUser?.email?.split("@")[0] || roleLabel;
   const userInitials = userName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "AS";
 
   useEffect(() => {
@@ -178,7 +187,7 @@ export default function AssessorHeader() {
             <div className="absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
               <div className="border-b border-slate-100 px-3 py-3">
                 <p className="truncate text-xs font-semibold text-slate-900">{userName}</p>
-                <p className="truncate text-xs text-slate-500">{user?.email || user?.username || roleLabel}</p>
+                <p className="truncate text-xs text-slate-500">{displayUser?.email || displayUser?.username || roleLabel}</p>
               </div>
               <Link href={`/${locale}/admin/assessor/profile`} className="flex items-center gap-2.5 px-3 py-2.5 text-xs text-slate-700 hover:bg-slate-50">
                 <Settings className="h-4 w-4 text-slate-500" />

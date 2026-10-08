@@ -3,6 +3,9 @@ export interface DataEncoderRecentCustomer {
 	name?: string | null;
 	businessName?: string | null;
 	email?: string | null;
+	tinNumber?: string | null;
+	isVerified?: boolean | null;
+	status?: string | number | null;
 	registeredDate?: string | null;
 	createdDate?: string | null;
 	createAt?: string | null;
@@ -16,13 +19,21 @@ export interface DataEncoderRecentService {
 	description?: string | null;
 	itemDescription?: string | null;
 	importerName?: string | null;
+	importerId?: number | string;
 	importer?: unknown;
+	notes?: string | null;
+	countryOfOrigin?: string | null;
+	routeCategory?: string | null;
 	origin?: string | null;
 	destination?: string | null;
+	riskLevel?: string | null;
 	status?: string | number | null;
 	createdDate?: string | null;
 	createAt?: string | null;
 	updatedAt?: string | null;
+	dueDate?: string | null;
+	dueAt?: string | null;
+	deadline?: string | null;
 	[key: string]: unknown;
 }
 
@@ -32,6 +43,9 @@ export interface DataEncoderDashboardSummary {
 	totalServicesCreated: number;
 	pendingServiceApprovals: number;
 	draftServices: number;
+	openCases?: number;
+	dueWithin48Hours?: number;
+	clearedThisMonth?: number;
 	recentCustomers: DataEncoderRecentCustomer[];
 	recentServices: DataEncoderRecentService[];
 }

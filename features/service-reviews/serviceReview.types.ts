@@ -3,6 +3,7 @@ export type CaseStatusTag = "Requires customer action" | "Blocked" | "Needs revi
 
 export interface EvidenceFile {
   id: string;
+  documentId?: string;
   name: string;
   type: string;
   size?: string;

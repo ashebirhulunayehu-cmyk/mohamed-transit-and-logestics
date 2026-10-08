@@ -434,8 +434,9 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     set({ sending: true, error: null });
     const result = await useMessagingStore.getState().sendMessage({
       serviceId,
-      receiverId: recipient,
-      messageText: text.trim(),
+      recipientUserId: recipient,
+      content: text.trim(),
+      subject: text.trim(),
     });
     if (!result) {
       set({

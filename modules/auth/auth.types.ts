@@ -29,12 +29,14 @@ export interface IUserRoleAssignment {
 export interface IUser {
   id?: string | number;
   username?: string;
+  roleName?: string;
   email?: string;
   firstName?: string;
   lastName?: string;
   phone?: string;
   phoneNumber?: string;
   profilePhoto?: string;
+  profilePictureUrl?: string;
   password?: string;
   refreshToken?: string;
   refreshTokenExpireDate?: string;
@@ -143,6 +145,7 @@ export type AuthStore = AuthState & {
   login: (payload: ILogin) => Promise<IUser>;
   logout: () => Promise<void>;
   updateProfile: (payload: UpdateUserRequest) => Promise<IUser>;
+  syncProfile: (payload: Partial<IUser>, options?: { persist?: boolean }) => void;
   signUp: (payload: FormData | IUser) => Promise<void>;
   forgotPassword: (payload: ForgotPasswordRequest) => Promise<void>;
   updatePassword: (payload: ChangePasswordRequest) => Promise<void>;

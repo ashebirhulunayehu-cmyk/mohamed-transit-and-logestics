@@ -83,13 +83,20 @@ export interface AssessorApiEnvelope<T = unknown> {
   } | T;
 }
 
-export interface AssessorDashboardSummary {
+export interface AssessorDashboardMetrics {
   pendingCustomerApprovals: number;
   pendingServiceReviews: number;
+  totalComplianceIssues: number;
+}
+
+export interface AssessorDashboardSummary
+  extends Pick<AssessorDashboardMetrics, "pendingCustomerApprovals" | "pendingServiceReviews"> {
+  totalComplianceIssues?: number;
+  complianceIssues?: number;
   servicesUnderOversight: number;
   completedReviewsToday: number;
   recentCustomerApprovals: RecentCustomerApproval[];
-  recentServiceReviews: unknown[];
+  recentServiceReviews: PendingServiceReview[];
 }
 
 export interface RecentCustomerApproval {
@@ -121,15 +128,27 @@ export interface AssessorComplianceIssue {
 
 export interface PendingCustomerApproval {
   id?: string | number;
+  customerId?: string | number;
   name?: string;
+  businessName?: string;
   importerType?: string;
+  businessType?: string;
   licence?: string;
+  businessLicense?: string;
   tin?: string;
+  tinNumber?: string;
   status?: string;
+  isVerified?: boolean | number | string;
   primaryContact?: string;
+  contactPerson?: string;
   email?: string;
+  contactEmail?: string;
   phone?: string;
+  contactPhone?: string;
   address?: string;
+  businessAddress?: string;
+  city?: string;
+  state?: string;
   registeredDate?: string;
   activeServices?: number;
   checklist?: Array<{
@@ -137,6 +156,23 @@ export interface PendingCustomerApproval {
     name?: string;
     status?: string;
   }>;
+  [key: string]: unknown;
+}
+
+export interface PendingServiceReview {
+  id?: string | number;
+  serviceId?: string | number;
+  shipmentId?: number;
+  trackingNumber?: string;
+  referenceNumber?: string;
+  description?: string;
+  serviceTypeName?: string;
+  businessName?: string;
+  importerName?: string;
+  city?: string;
+  origin?: string;
+  destination?: string;
+  status?: string;
   [key: string]: unknown;
 }
 

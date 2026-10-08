@@ -11,7 +11,24 @@ type AuthUserWithRole = {
   id?: string | number;
 };
 
-export default function AccountDetailsCard() {
+export interface AccountDetails {
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  role?: string;
+  branch?: string;
+  userId?: string;
+  email?: string;
+  phone?: string;
+  username?: string;
+  profilePictureUrl?: string;
+}
+
+interface AccountDetailsCardProps {
+  profile?: AccountDetails;
+}
+
+export default function AccountDetailsCard({ profile }: AccountDetailsCardProps) {
   const authUser = useAuthStore((state) => state.user) as AuthUserWithRole | null;
   const { fullName, role, branch, userId } = useProfileStore();
 
@@ -23,10 +40,13 @@ export default function AccountDetailsCard() {
   const resolvedUserId = authUser?.id ? String(authUser.id) : userId;
 
   const details = [
-    { label: "Full name", value: resolvedFullName },
-    { label: "Role", value: resolvedRole },
-    { label: "Branch", value: branch },
-    { label: "User ID", value: resolvedUserId },
+    { label: "Full name", value: profile?.fullName || resolvedFullName },
+    { label: "Role", value: profile?.role || resolvedRole },
+    { label: "Branch", value: profile?.branch || branch },
+    { label: "User ID", value: profile?.userId || resolvedUserId },
+    ...(profile?.email ? [{ label: "Email", value: profile.email }] : []),
+    ...(profile?.phone ? [{ label: "Phone", value: profile.phone }] : []),
+    ...(profile?.username ? [{ label: "Username", value: profile.username }] : []),
   ];
 
   return (

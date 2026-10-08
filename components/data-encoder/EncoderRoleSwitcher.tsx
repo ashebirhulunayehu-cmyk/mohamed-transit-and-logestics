@@ -4,6 +4,7 @@ import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, LogOut } from "lucide-react";
 import useAuthStore from "@/modules/auth/auth.store";
+import { resolveApiAssetUrl } from "@/modules/utils/asset-url";
 
 const roles = [
 	{ id: "customer", label: "Customer / Importer", href: (locale: string) => `/${locale}/customer/dashboard` },
@@ -15,12 +16,17 @@ const roles = [
 
 interface EncoderRoleSwitcherProps {
 	collapsed?: boolean;
+	profilePhotoUrl?: string;
 }
 
-export default function EncoderRoleSwitcher({ collapsed = false }: EncoderRoleSwitcherProps) {
+export default function EncoderRoleSwitcher({
+	collapsed = false,
+	profilePhotoUrl: profilePhotoUrlOverride,
+}: EncoderRoleSwitcherProps) {
 	const pathname = usePathname();
 	const router = useRouter();
 	const logout = useAuthStore((state) => state.logout);
+	const user = useAuthStore((state) => state.user);
 	const [open, setOpen] = useState(false);
 	const firstSegment = pathname.split("/").filter(Boolean)[0];
 	const locale = firstSegment === "am" || firstSegment === "en" ? firstSegment : "en";
@@ -34,6 +40,35 @@ export default function EncoderRoleSwitcher({ collapsed = false }: EncoderRoleSw
 					? "assessor"
 					: "data-encoder";
 	const currentRole = roles.find((role) => role.id === activeRole) ?? roles[4];
+	const displayName =
+		[user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+		user?.username ||
+		user?.email?.split("@")[0] ||
+		"Data Encoder";
+	const initials =
+		displayName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "DE";
+	const profilePhotoValue =
+		profilePhotoUrlOverride || user?.profilePictureUrl || user?.profilePhoto;
+	const profilePhotoUrl = resolveApiAssetUrl(profilePhotoValue);
+	const avatar = (
+		<span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-blue-100 text-xs font-bold text-blue-700">
+			{initials}
+			{profilePhotoUrl && (
+				// Direct img rendering supports blob URLs used to preview a newly saved photo.
+				// eslint-disable-next-line @next/next/no-img-element
+				<img
+					key={profilePhotoUrl}
+					src={profilePhotoUrl}
+					alt=""
+					aria-hidden="true"
+					onError={(event) => {
+						event.currentTarget.style.display = "none";
+					}}
+					className="absolute inset-0 z-10 block h-full w-full object-cover"
+				/>
+			)}
+		</span>
+	);
 
 	const handleLogout = async () => {
 		setOpen(false);
@@ -54,11 +89,14 @@ export default function EncoderRoleSwitcher({ collapsed = false }: EncoderRoleSw
 				}`}
 			>
 				{collapsed ? (
-					<span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">DE</span>
+					avatar
 				) : (
-					<span className="min-w-0">
-						<span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Prototype role</span>
-						<span className="block truncate text-sm font-bold text-slate-900">{currentRole.label}</span>
+					<span className="flex min-w-0 items-center gap-2">
+						{avatar}
+						<span className="min-w-0">
+							<span className="block truncate text-xs font-semibold text-slate-900">{displayName}</span>
+							<span className="block truncate text-[10px] text-slate-500">{currentRole.label}</span>
+						</span>
 					</span>
 				)}
 				{!collapsed && (

@@ -3,7 +3,7 @@
 import React from "react";
 import { useEffect } from "react";
 import { useServiceReviewStore } from "../serviceReview.store";
-import { Search, Lock, Clock } from "lucide-react";
+import { Search, Lock, Clock, RefreshCw } from "lucide-react";
 import { CaseStatusTag } from "../serviceReview.types";
 
 export function ServiceReviewQueue() {
@@ -59,10 +59,24 @@ export function ServiceReviewQueue() {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
       <div className="border-b border-slate-200 bg-slate-50/50 p-5">
-        <h2 className="text-sm font-bold text-slate-900">Review queue</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          {filteredCases.length} of {cases.length} cases
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Review queue</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              {filteredCases.length} of {cases.length} cases · Assessor pending reviews
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void fetchCases()}
+            disabled={loading}
+            aria-label="Refresh pending service reviews"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
 
         <div className="relative mt-4">
           <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
@@ -84,11 +98,25 @@ export function ServiceReviewQueue() {
 
       <div className="divide-y divide-slate-100">
         {error ? (
-          <p role="alert" className="p-5 text-sm text-red-700">{error}</p>
+          <div role="alert" className="flex items-center justify-between gap-3 p-5 text-sm text-red-700">
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={() => void fetchCases()}
+              disabled={loading}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded border border-red-200 px-2.5 py-1.5 text-xs font-semibold hover:bg-red-50 disabled:opacity-60"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              Retry
+            </button>
+          </div>
         ) : loading && cases.length === 0 ? (
           <p className="p-5 text-sm text-slate-500">Loading service reviews...</p>
         ) : filteredCases.length === 0 ? (
-          <p className="p-5 text-sm text-slate-500">No pending service reviews.</p>
+          <div className="p-5 text-sm text-slate-500">
+            <p>{cases.length ? "No cases match your search." : "No pending service reviews were returned by the Assessor API."}</p>
+            {!cases.length && <p className="mt-1 text-xs text-slate-400">Submitted services appear here after the backend marks them ready for assessment.</p>}
+          </div>
         ) : filteredCases.map((item) => (
           <div
             key={item.id}

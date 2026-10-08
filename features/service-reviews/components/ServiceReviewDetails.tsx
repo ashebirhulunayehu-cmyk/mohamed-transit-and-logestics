@@ -1,16 +1,37 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useServiceReviewStore } from "../serviceReview.store";
 import { StageEvidence } from "./StageEvidence";
 import { AssessmentDecision } from "./AssessmentDecision";
 import { ArrowRight, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import type { EvidenceFile } from "../serviceReview.types";
+
+const EMPTY_EVIDENCE_FILES: EvidenceFile[] = [];
 
 export function ServiceReviewDetails() {
   const selectedCase = useServiceReviewStore((state) => state.getSelectedCase());
+  const fetchServiceDocuments = useServiceReviewStore((state) => state.fetchServiceDocuments);
+  const documentsLoading = useServiceReviewStore((state) => state.documentsLoading);
+  const documentsError = useServiceReviewStore((state) => state.documentsError);
+  const serviceDocuments = useServiceReviewStore((state) =>
+    selectedCase?.shipmentId
+      ? state.serviceDocuments[String(selectedCase.shipmentId)] ?? selectedCase.evidenceFiles
+      : selectedCase?.evidenceFiles ?? EMPTY_EVIDENCE_FILES,
+  );
   const { lang = "en" } = useParams<{ lang: string }>();
+
+  useEffect(() => {
+    const serviceId = selectedCase?.shipmentId;
+    if (!serviceId) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchServiceDocuments(serviceId);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchServiceDocuments, selectedCase?.shipmentId]);
 
   if (!selectedCase) {
     return (
@@ -105,8 +126,10 @@ export function ServiceReviewDetails() {
 
       {/* Evidence Section */}
       <StageEvidence
-        files={selectedCase.evidenceFiles}
+        files={serviceDocuments}
         currentStage={selectedCase.currentStage}
+        loading={documentsLoading}
+        error={documentsError}
       />
 
       {/* Assessment Decision Section */}

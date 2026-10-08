@@ -14,12 +14,14 @@ interface ApprovalTableProps {
   applicants: Applicant[];
   selectedId: string | null;
   onSelectApplicant: (id: string) => void;
+  loading?: boolean;
 }
 
 export const ApprovalTable: React.FC<ApprovalTableProps> = ({
   applicants,
   selectedId,
   onSelectApplicant,
+  loading = false,
 }) => {
   return (
     <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden mb-6">
@@ -45,7 +47,9 @@ export const ApprovalTable: React.FC<ApprovalTableProps> = ({
             {applicants.length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-8 text-center text-slate-400 text-xs">
-                  No approval requests found matching your filter.
+                  {loading
+                    ? "Loading pending customer approvals…"
+                    : "No approval requests found matching your filter."}
                 </td>
               </tr>
             ) : (

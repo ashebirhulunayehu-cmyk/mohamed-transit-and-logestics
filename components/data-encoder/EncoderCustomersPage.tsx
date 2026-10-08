@@ -10,6 +10,7 @@ import {
 import { Plus, RefreshCw, Search, X } from "lucide-react";
 
 import EncoderSectionLayout from "@/components/data-encoder/EncoderSectionLayout";
+import { DataEncoderEndpoints } from "@/modules/dataencoder/data-encoder.endpoint";
 import useAuthStore from "@/modules/auth/auth.store";
 
 type CustomerRow = {
@@ -266,7 +267,7 @@ export default function EncoderCustomersPage() {
 
 		try {
 			const [response, servicesResponse] = await Promise.all([
-				fetch("/api/encoder/customers?recordStatus=1", { cache: "no-store" }),
+				DataEncoderEndpoints.getCustomerRegistry("1"),
 				fetch("/api/encoder/services", { cache: "no-store" }).catch(() => null),
 			]);
 			const body: unknown = response.status === 204 ? [] : await response.json();
@@ -414,11 +415,7 @@ export default function EncoderCustomersPage() {
 		}
 
 		try {
-			const response = await fetch("/api/encoder/customers", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(payload),
-			});
+			const response = await DataEncoderEndpoints.createCustomer(payload);
 			const body: unknown = response.status === 204 ? null : await response.json();
 			if (
 				!response.ok ||

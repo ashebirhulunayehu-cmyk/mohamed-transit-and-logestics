@@ -30,6 +30,7 @@ export const ChatWindow = () => {
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [composeServiceId, setComposeServiceId] = useState("");
   const [composeRecipientId, setComposeRecipientId] = useState("");
+  const [composeSubject, setComposeSubject] = useState("");
   const [composeError, setComposeError] = useState<string | null>(null);
   const [composeStatus, setComposeStatus] = useState<string | null>(null);
   const [composeSending, setComposeSending] = useState(false);
@@ -62,14 +63,19 @@ export const ChatWindow = () => {
       setComposeError("Write a message before sending.");
       return;
     }
+    if (!composeSubject.trim()) {
+      setComposeError("Enter a subject before sending.");
+      return;
+    }
 
     setComposeError(null);
     setComposeStatus(null);
     setComposeSending(true);
     const result = await useMessagingStore.getState().sendMessage({
       serviceId,
-      receiverId,
-      messageText: inputText.trim(),
+      recipientUserId: receiverId,
+      content: inputText.trim(),
+      subject: composeSubject.trim(),
     });
     const sendError = useMessagingStore.getState().error;
     setComposeSending(false);
@@ -80,6 +86,7 @@ export const ChatWindow = () => {
 
     setComposeStatus(result.message || "Message sent successfully.");
     setInputText("");
+    setComposeSubject("");
     await useMessageStore.getState().fetchConversations();
   };
 
@@ -153,6 +160,9 @@ export const ChatWindow = () => {
                     <input type="number" min="1" step="1" required value={composeRecipientId} onChange={(event) => setComposeRecipientId(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
                   </label>
                 </div>
+                <label className="block text-xs font-medium text-slate-700">Subject
+                  <input required value={composeSubject} onChange={(event) => { setComposeSubject(event.target.value); setComposeError(null); }} placeholder="Message subject" className="mt-1.5 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
+                </label>
                 <label className="block text-xs font-medium text-slate-700">Message
                   <textarea required rows={3} value={inputText} onChange={(event) => { setInputText(event.target.value); setComposeError(null); }} placeholder="Write a message..." className="mt-1.5 w-full resize-y rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
                 </label>

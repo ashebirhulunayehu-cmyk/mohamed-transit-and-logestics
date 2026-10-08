@@ -68,8 +68,9 @@ export interface UserMessage {
 
 export interface SendMessageRequest {
 	serviceId: string | number;
-	receiverId: string | number;
-	messageText: string;
+	recipientUserId: string | number;
+	content: string;
+	subject: string;
 }
 
 export interface SendMessageResult {

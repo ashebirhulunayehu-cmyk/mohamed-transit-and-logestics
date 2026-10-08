@@ -14,8 +14,8 @@ export const AssessorEndpoints = {
     service.get(API_ROUTES.assessor.getPendingCustomerApprovals, { params }),
 
   // 1B. Pending Services
-  getPendingServices: (params?: Record<string, unknown>) =>
-    service.get(API_ROUTES.assessor.getPendingServices, { params }),
+  getPendingServices: () =>
+    service.get(API_ROUTES.assessor.getPendingServiceReviews),
 
   // 2. Approve Customer
   approveCustomer: async (
@@ -24,8 +24,36 @@ export const AssessorEndpoints = {
     (await service.put(API_ROUTES.assessor.approveCustomer, data)) as unknown as CustomerApprovalResult,
 
   // 3. Pending Service Reviews
-  getPendingServiceReviews: (params?: Record<string, unknown>) =>
-    service.get(API_ROUTES.assessor.getPendingServiceReviews, { params }),
+  getPendingServiceReviews: () =>
+    service.get(API_ROUTES.assessor.getPendingServiceReviews),
+
+  // GET /api/v1/Document/GetServiceDocuments?serviceId={id}
+  getServiceDocuments: (serviceId: number | string) =>
+    service.get(API_ROUTES.document.getServiceDocuments, {
+      params: { serviceId },
+    }),
+
+  // GET /api/v1/Document/DownloadDocument?documentId={id}
+  downloadDocument: (documentId: number | string) =>
+    service.get(API_ROUTES.document.downloadDocument, {
+      params: { documentId },
+      responseType: "blob",
+    }),
+
+  // POST /api/v1/Document/DownloadDocuments
+  downloadDocuments: (documentIds: Array<number | string>) =>
+    service.post(API_ROUTES.document.downloadDocuments, documentIds, {
+      responseType: "blob",
+    }),
+
+  // POST /api/v1/Document/VerifyDocument
+  verifyDocument: (payload: {
+    documentId: number | string;
+    isVerified: boolean;
+    notes?: string;
+    verificationNotes?: string;
+    verifiedByUserId?: number | string;
+  }) => service.post(API_ROUTES.document.verifyDocument, payload),
 
   // 4. Review Service
   reviewService: async (data: AssessorServiceReviewRequest): Promise<AssessorReviewedService> =>

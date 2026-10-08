@@ -24,7 +24,6 @@ import {
   Plus,
   RefreshCw,
   Settings,
-  ShieldCheck,
   UploadCloud,
   UserCircle,
   UsersRound,
@@ -201,6 +200,7 @@ const formatDate = (...values: unknown[]): string => {
 
 const getStatusTone = (status: string): string => {
   const normalized = status.toLowerCase();
+  if (normalized.includes("reject") || normalized.includes("block") || normalized.includes("fail")) return "danger";
   if (normalized.includes("approved") || normalized.includes("complete")) return "success";
   if (normalized.includes("pending") || normalized.includes("draft")) return "warning";
   return "info";
@@ -222,6 +222,7 @@ function StatusBadge({ label, tone }: { label: string; tone: string }) {
   const palette = {
     success: "bg-emerald-50 text-emerald-700",
     warning: "bg-amber-50 text-amber-700",
+    danger: "bg-rose-50 text-rose-700",
     info: "bg-blue-50 text-blue-700",
   } as const;
 
@@ -542,19 +543,60 @@ export default function DataEncoderDashboard() {
   const metrics: {
     metric: DataEncoderDashboardMetric;
     title: string;
-    value: number;
+    value: number | undefined;
+    caption: string;
     tone: "default" | "warning" | "success";
     icon: typeof FolderOpen;
   }[] = [
-    { metric: "totalCustomersCreated", title: "Customers created", value: dashboardData.totalCustomersCreated, tone: "default", icon: FolderOpen },
-    { metric: "pendingCustomerApprovals", title: "Pending customer approvals", value: dashboardData.pendingCustomerApprovals, tone: "warning", icon: CircleAlert },
-    { metric: "totalServicesCreated", title: "Services created", value: dashboardData.totalServicesCreated, tone: "default", icon: Clock3 },
-    { metric: "pendingServiceApprovals", title: "Pending service approvals", value: dashboardData.pendingServiceApprovals, tone: "warning", icon: ShieldCheck },
-    { metric: "draftServices", title: "Draft services", value: dashboardData.draftServices, tone: "success", icon: Check },
+    { metric: "openCases", title: "Open cases", value: dashboardData.openCases, caption: "Active service records", tone: "default", icon: FolderOpen },
+    { metric: "pendingServiceApprovals", title: "Needs attention", value: dashboardData.pendingServiceApprovals, caption: "Risk or review", tone: "warning", icon: CircleAlert },
+    { metric: "dueWithin48Hours", title: "Due within 48h", value: dashboardData.dueWithin48Hours, caption: "Pending cases", tone: "warning", icon: Clock3 },
+    { metric: "clearedThisMonth", title: "Cleared this month", value: dashboardData.clearedThisMonth, caption: "Completed service records", tone: "success", icon: Check },
   ];
 
+  const latestActivity = [
+    ...dashboardData.recentServices.map((service, index) => {
+      const date = readText(service.updatedAt, service.createdDate, service.createAt);
+      const timestamp = date ? Date.parse(date) : 0;
+      const importer = readText(service.importerName, getRelatedName(service.importer));
+      const route = [readText(service.origin), readText(service.destination)].filter(Boolean).join(" → ");
+      return {
+        key: `service-${readText(service.id, service.trackingNumber, service.serviceNumber) || index}`,
+        kind: "Service",
+        title: readText(service.trackingNumber, service.serviceNumber) || "Service record",
+        detail: [readText(service.description, service.itemDescription), importer, route].filter(Boolean).join(" · "),
+        status: getDashboardServiceStatus(service.status),
+        date,
+        timestamp: Number.isFinite(timestamp) ? timestamp : 0,
+      };
+    }),
+    ...dashboardData.recentCustomers.map((customer, index) => {
+      const date = readText(customer.createdDate, customer.registeredDate, customer.createAt);
+      const timestamp = date ? Date.parse(date) : 0;
+      const tin = readText(customer.tinNumber);
+      return {
+        key: `customer-${readText(customer.id, customer.email) || index}`,
+        kind: "Customer",
+        title: readText(customer.businessName, customer.name) || "Customer record",
+        detail: [
+          tin ? `TIN ${tin}` : "",
+          readText(customer.email),
+        ].filter(Boolean).join(" · ") || "Customer record created",
+        status: readText(customer.status) || (
+          customer.isVerified === true
+            ? "Verified"
+            : customer.isVerified === false
+              ? "Pending verification"
+              : ""
+        ),
+        date,
+        timestamp: Number.isFinite(timestamp) ? timestamp : 0,
+      };
+    }),
+  ].sort((first, second) => second.timestamp - first.timestamp).slice(0, 6);
+
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-800">
+    <main className="min-h-screen bg-[#f7f8fa] text-slate-800">
       {mobileSidebarOpen && (
         <button
           type="button"
@@ -1108,13 +1150,13 @@ export default function DataEncoderDashboard() {
               </section>
               )}
 
-              <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-                {metrics.map(({ metric, title, value, tone, icon: Icon }) => {
-                  const unavailable = unavailableMetrics.includes(metric);
+              <section aria-label="Data Encoder metrics" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {metrics.map(({ metric, title, value, caption, tone, icon: Icon }) => {
+                  const unavailable = unavailableMetrics.includes(metric) || value === undefined;
                   return (
-                  <div key={title} className="group min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+                  <div key={title} className={`group min-w-0 rounded-2xl border border-slate-200 border-l-4 ${tone === 'warning' ? 'border-l-amber-500' : 'border-l-blue-600'} bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md`}>
                     <div className="flex items-start justify-between gap-3">
-                      <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${tone === 'warning' ? 'bg-amber-50 text-amber-700' : tone === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>
+                      <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${tone === 'warning' ? 'bg-amber-50 text-amber-700' : tone === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>
                         <Icon className="h-5 w-5" />
                       </div>
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${unavailable ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{loading ? 'Loading' : unavailable ? 'Unavailable' : 'Live'}</span>
@@ -1122,7 +1164,7 @@ export default function DataEncoderDashboard() {
                     <div className="mt-5">
                       <p className="text-sm font-medium text-slate-500">{title}</p>
                       <p className="mt-1 text-3xl font-semibold text-slate-950">{unavailable ? "—" : value.toLocaleString()}</p>
-                      <p className="mt-1 text-xs text-slate-400">{tone === 'warning' ? 'Waiting for review' : tone === 'success' ? 'Saved, not submitted' : 'Current total'}</p>
+                      <p className="mt-1 text-xs text-slate-400">{caption}</p>
                     </div>
                   </div>
                   );
@@ -1132,118 +1174,82 @@ export default function DataEncoderDashboard() {
               {isStandaloneDashboard && (
               <>
               <section className="grid gap-6 xl:grid-cols-[1.7fr_1fr]">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-slate-400">Approval workflow</p>
-                      <h2 className="mt-1 text-lg font-semibold text-slate-950">Work awaiting review</h2>
-                      <p className="mt-1 text-sm text-slate-500">Current customer and service approval queues.</p>
-                    </div>
-                    <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">Live data</span>
-                  </div>
-                  <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {[
-                      ['Customer approvals', dashboardData.pendingCustomerApprovals],
-                      ['Service approvals', dashboardData.pendingServiceApprovals],
-                      ['Draft services', dashboardData.draftServices],
-                    ].map(([label, value]) => (
-                      <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                        <p className="text-xs text-slate-500">{label}</p>
-                        <p className="mt-1 text-xl font-semibold text-slate-950">{value}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div id="draft-services" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-slate-400">Capture status</p>
-                      <h2 className="mt-1 text-lg font-semibold text-slate-950">Draft workspace</h2>
-                    </div>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700"><FileText className="h-5 w-5" /></div>
-                  </div>
-                  <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-medium text-slate-700">Unsubmitted service drafts</p>
-                        <p className="mt-1 text-xs text-slate-500">Saved records not yet sent for approval</p>
-                      </div>
-                      <span className="text-2xl font-semibold text-slate-950">{dashboardData.draftServices}</span>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/70 p-4">
-                    <Check className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />
-                    <p className="text-xs leading-5 text-blue-800">Counts reflect the latest Data Encoder dashboard response.</p>
-                  </div>
-                </div>
-              </section>
-
-              <section className="grid gap-6 xl:grid-cols-[1.7fr_1fr]">
                 <div id="recent-services" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="border-b border-slate-200 p-5 sm:p-6">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <p className="text-xs font-semibold uppercase text-slate-400">Work queue</p>
-                        <h2 className="mt-1 text-lg font-semibold text-slate-950">Recent services</h2>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Service records</p>
+                        <h2 className="mt-1 text-lg font-semibold text-slate-950">Priority queue</h2>
+                        <p className="mt-1 text-sm text-slate-500">Recent service records and their approval state.</p>
                       </div>
-                      <span className="text-xs font-medium text-slate-400">{dashboardData.recentServices.length} records</span>
+                      <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">
+                        {dashboardData.recentServices.length} records
+                      </span>
                     </div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full table-fixed text-left">
-                      <thead className="bg-slate-50">
-                        <tr className="text-xs font-semibold uppercase text-slate-400">
-                          <th className="w-[24%] px-3 py-3.5 sm:px-5">Service</th><th className="w-[31%] px-3 py-3.5 sm:px-5">Customer</th><th className="w-[23%] px-3 py-3.5 sm:px-5">Status</th><th className="w-[22%] px-3 py-3.5 sm:px-5">Updated</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {dashboardData.recentServices.map((item, index) => {
-                          const status = getDashboardServiceStatus(item.status);
-                          const customer = readText(item.importerName, getRelatedName(item.importer));
-                          return (
-                            <tr key={readText(item.id, item.trackingNumber, item.serviceNumber) || `service-${index}`} className="transition hover:bg-slate-50/70">
-                              <td className="min-w-0 px-3 py-4 sm:px-5">
-                                <p className="truncate text-sm font-semibold text-slate-900" title={readText(item.trackingNumber, item.serviceNumber, item.id)}>{readText(item.trackingNumber, item.serviceNumber, item.id) || 'Service record'}</p>
-                                <p className="mt-0.5 truncate text-xs text-slate-400" title={readText(item.description, item.itemDescription)}>{readText(item.description, item.itemDescription) || 'No description provided'}</p>
-                              </td>
-                              <td className="truncate px-3 py-4 text-sm text-slate-600 sm:px-5" title={customer}>{customer || 'Customer unavailable'}</td>
-                              <td className="truncate px-3 py-4 sm:px-5"><StatusBadge label={status} tone={getStatusTone(status)} /></td>
-                              <td className="truncate px-3 py-4 text-xs text-slate-500 sm:px-5">{formatDate(item.updatedAt, item.createdDate, item.createAt)}</td>
-                            </tr>
-                          );
-                        })}
-                        {!loading && dashboardData.recentServices.length === 0 && (
-                          <tr><td colSpan={4} className="px-5 py-10 text-center text-sm text-slate-500">No recent services returned by the API.</td></tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="divide-y divide-slate-100">
+                    {dashboardData.recentServices.map((item, index) => {
+                      const status = getDashboardServiceStatus(item.status);
+                      const customer = readText(item.importerName, getRelatedName(item.importer));
+                      const route = [readText(item.origin), readText(item.destination)].filter(Boolean).join(" → ");
+                      const risk = readText(item.riskLevel);
+                      return (
+                        <article key={readText(item.id, item.trackingNumber, item.serviceNumber) || `service-${index}`} className="px-5 py-4 transition hover:bg-slate-50/70">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <p className="font-mono text-xs font-semibold text-blue-800" title={readText(item.trackingNumber, item.serviceNumber, item.id)}>
+                              {readText(item.trackingNumber, item.serviceNumber, item.id) || "Service record"}
+                            </p>
+                            <StatusBadge label={status} tone={getStatusTone(status)} />
+                            {risk && <StatusBadge label={risk} tone={getStatusTone(risk)} />}
+                            <span className="ml-auto text-xs text-slate-400">
+                              Updated {formatDate(item.updatedAt, item.createdDate, item.createAt)}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm font-semibold text-slate-900">
+                            {readText(item.description, item.itemDescription) || "No description provided"}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {customer || "Customer unavailable"}{route ? ` · ${route}` : ""}
+                          </p>
+                        </article>
+                      );
+                    })}
+                    {!loading && dashboardData.recentServices.length === 0 && (
+                      <p className="px-5 py-10 text-center text-sm text-slate-500">No recent services returned by the API.</p>
+                    )}
+                    {loading && dashboardData.recentServices.length === 0 && (
+                      <p className="px-5 py-10 text-center text-sm text-slate-500">Loading service records…</p>
+                    )}
                   </div>
                 </div>
 
                 <div id="recent-customers" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="border-b border-slate-200 p-5 sm:p-6">
-                    <p className="text-xs font-semibold uppercase text-slate-400">Customer register</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Customer and service records</p>
                     <div className="mt-1 flex items-center justify-between gap-3">
-                      <h2 className="text-lg font-semibold text-slate-950">Recent customers</h2>
-                      <span className="text-xs font-medium text-slate-400">{dashboardData.recentCustomers.length} records</span>
+                      <h2 className="text-lg font-semibold text-slate-950">Latest activity</h2>
+                      <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">{latestActivity.length} records</span>
                     </div>
                   </div>
                   <div className="divide-y divide-slate-100">
-                    {dashboardData.recentCustomers.map((item, index) => (
-                      <div key={readText(item.id, item.email) || `customer-${index}`} className="px-5 py-4">
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-700"><UsersRound className="h-4 w-4" /></div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-slate-900">{readText(item.businessName, item.name) || `Customer ${readText(item.id)}`}</p>
-                            <p className="mt-1 truncate text-xs text-slate-500">{readText(item.email) || 'Email unavailable'}</p>
-                            <p className="mt-2 text-xs text-slate-400">Created {formatDate(item.createdDate, item.registeredDate, item.createAt)}</p>
-                          </div>
+                    {latestActivity.map((item) => (
+                      <article key={item.key} className="px-5 py-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-900">{item.title}</span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{item.kind}</span>
+                          {item.status && <StatusBadge label={item.status} tone={getStatusTone(item.status)} />}
                         </div>
-                      </div>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</p>
+                        <p className="mt-2 text-[10px] font-medium text-slate-400">
+                          {item.kind} · {item.date ? formatDate(item.date) : "Date unavailable"}
+                        </p>
+                      </article>
                     ))}
-                    {!loading && dashboardData.recentCustomers.length === 0 && (
-                      <p className="px-5 py-10 text-center text-sm text-slate-500">No recent customers returned by the API.</p>
+                    {!loading && latestActivity.length === 0 && (
+                      <p className="px-5 py-10 text-center text-sm text-slate-500">No recent customer or service records returned by the API.</p>
+                    )}
+                    {loading && latestActivity.length === 0 && (
+                      <p className="px-5 py-10 text-center text-sm text-slate-500">Loading recent activity…</p>
                     )}
                   </div>
                 </div>

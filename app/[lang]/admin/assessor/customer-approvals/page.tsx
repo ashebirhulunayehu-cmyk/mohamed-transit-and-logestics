@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, use } from "react";
+import { RefreshCw } from "lucide-react";
 
 import { ApprovalStats } from "@/components/assessor/customer-approvals/ApprovalStats";
 import { ApprovalFilters } from "@/components/assessor/customer-approvals/ApprovalFilters";
@@ -25,7 +26,7 @@ const getApprovalStatus = (value: unknown, isVerified: unknown): ApprovalStatus 
   }
 
   const status = value.toLowerCase().trim();
-  if (["verified", "approved"].includes(status)) return "Verified";
+  if (["verified", "approved"].includes(status) || isVerified === true || isVerified === 1 || isVerified === "1") return "Verified";
   if (status === "flagged") return "Flagged";
   if (["rejected", "declined"].includes(status)) return "Rejected";
   if (["returned for revision", "returned", "revision required"].includes(status)) {
@@ -72,7 +73,18 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   const resolvedParams = params ? use(params) : { lang: "en" };
   const currentLang = resolvedParams?.lang || "en";
 
-  const { pendingCustomers, fetchPendingCustomers, approveCustomer, dashboardData, fetchDashboard } = useAssessorStore();
+  const pendingCustomers = useAssessorStore((state) => state.pendingCustomers);
+  const pendingCustomersLoading = useAssessorStore((state) => state.pendingCustomersLoading);
+  const pendingCustomersError = useAssessorStore((state) => state.pendingCustomersError);
+  const fetchPendingCustomers = useAssessorStore((state) => state.fetchPendingCustomers);
+  const approveCustomer = useAssessorStore((state) => state.approveCustomer);
+  const dashboardData = useAssessorStore((state) => state.dashboardData);
+  const fetchDashboard = useAssessorStore((state) => state.fetchDashboard);
+  const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
+  const [approvedCustomer, setApprovedCustomer] = useState<CustomerApprovalResult | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<"All" | ApprovalStatus>("All");
 
   useEffect(() => {
     void fetchPendingCustomers();
@@ -82,21 +94,6 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   const applicants = useMemo<ApprovalApplicant[]>(() => {
     return pendingCustomers.map(normalizeApplicant);
   }, [pendingCustomers]);
-
-  useEffect(() => {
-    if (!applicants.length) {
-      setSelectedApplicantId("");
-      return;
-    }
-
-    setSelectedApplicantId((current) => {
-      if (current && applicants.some((applicant) => applicant.id === current)) {
-        return current;
-      }
-
-      return applicants[0].id;
-    });
-  }, [applicants]);
 
   const stats = useMemo(() => {
     const awaitingDecision = applicants.filter((applicant) => applicant.status === "Pending check").length;
@@ -117,13 +114,6 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   // ------------------------------------------------------------
   // State
   // ------------------------------------------------------------
-
-  const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
-  const [approvedCustomer, setApprovedCustomer] = useState<CustomerApprovalResult | null>(null);
-  const [approvalError, setApprovalError] = useState<string | null>(null);
-
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"All" | ApprovalStatus>("All");
 
   // Filter tabs counts
   const counts = useMemo(() => {
@@ -244,6 +234,21 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
           </div>
         </div>
 
+        {pendingCustomersError && (
+          <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <span>Unable to load pending customer approvals: {pendingCustomersError}</span>
+            <button
+              type="button"
+              onClick={() => void fetchPendingCustomers()}
+              disabled={pendingCustomersLoading}
+              className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100 disabled:cursor-wait disabled:opacity-60"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${pendingCustomersLoading ? "animate-spin" : ""}`} />
+              Retry
+            </button>
+          </div>
+        )}
+
         {approvalError && (
           <div role="alert" className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {approvalError}
@@ -294,7 +299,7 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
                     </h2>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Importers awaiting assessment
+                      {pendingCustomersLoading ? "Loading pending approvals…" : "Importers awaiting assessment"}
                     </p>
                   </div>
 
@@ -308,6 +313,7 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
                 applicants={filteredApplicants}
                 selectedId={activeApplicant?.id ?? null}
                 onSelectApplicant={(id: string) => setSelectedApplicantId(id)}
+                loading={pendingCustomersLoading}
               />
             </div>
           </div>

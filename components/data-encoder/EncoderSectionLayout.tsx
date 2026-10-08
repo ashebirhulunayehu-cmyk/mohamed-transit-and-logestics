@@ -25,6 +25,7 @@ interface EncoderSectionLayoutProps {
 	title: string;
 	description: string;
 	descriptionInHeader?: boolean;
+	profilePhotoUrl?: string;
 	children: ReactNode;
 }
 
@@ -107,6 +108,7 @@ export default function EncoderSectionLayout({
 	title,
 	description,
 	descriptionInHeader = false,
+	profilePhotoUrl,
 	children,
 }: EncoderSectionLayoutProps) {
 	const pathname = usePathname();
@@ -243,7 +245,10 @@ export default function EncoderSectionLayout({
 					</div>
 				</nav>
 				<div className="border-t border-slate-200 p-3">
-					<EncoderRoleSwitcher collapsed={collapsed} />
+					<EncoderRoleSwitcher
+						collapsed={collapsed}
+						profilePhotoUrl={profilePhotoUrl}
+					/>
 				</div>
 			</aside>
 

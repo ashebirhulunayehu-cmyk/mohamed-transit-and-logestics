@@ -370,9 +370,9 @@ export const useMessagingStore = create<MessageState>((set) => ({
 		} catch (error: unknown) {
 			const originalMessage = getMessagingErrorMessage(error, "Failed to send message.");
 			const message = /(?:404 Not Found|not found)/i.test(originalMessage)
-				? "The service or recipient could not be found. Check both IDs and try again."
+				? "The messaging endpoint, service, or recipient was not found. Check the API route and both IDs."
 				: /An error occurred while processing your request/i.test(originalMessage)
-					? "The API could not send this message. Check that the service and recipient IDs are valid and that you are not messaging yourself."
+					? "The messaging API returned an internal server error. The request reached the API, but it could not be completed. Check the backend logs for SendMessage."
 					: originalMessage;
 			set({ loading: false, error: message });
 			return null;

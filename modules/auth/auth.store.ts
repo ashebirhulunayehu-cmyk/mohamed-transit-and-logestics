@@ -226,6 +226,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
+  syncProfile: (payload: Partial<IUser>, options?: { persist?: boolean }) => {
+    const currentUser = get().user;
+    if (!currentUser) return;
+
+    const user: IUser = { ...currentUser, ...payload, id: currentUser.id };
+    if (options?.persist !== false) setUserData(user);
+    set({ user });
+  },
+
   updateProfile: async (payload: UpdateUserRequest) => {
     const currentUser = get().user;
     if (!currentUser?.id) {

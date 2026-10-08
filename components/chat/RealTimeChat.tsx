@@ -1,7 +1,8 @@
 'use client';
 
 import { Paperclip, Search, Send } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMessagingStore } from '@/modules/message/message.store';
 
 export type ChatThread = {
   id: string;
@@ -29,23 +30,6 @@ type RealTimeChatProps = {
   title?: string;
   emptyStateText?: string;
   className?: string;
-};
-
-const resolveResponseArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) return payload;
-
-  if (!payload || typeof payload !== 'object') return [];
-
-  const record = payload as Record<string, unknown>;
-
-  for (const key of ['data', 'items', 'messages', 'result']) {
-    const value = record[key];
-    if (Array.isArray(value)) {
-      return value;
-    }
-  }
-
-  return [];
 };
 
 const normalizeMessage = (item: unknown, currentUserId: number): ChatMessage | null => {
@@ -154,28 +138,18 @@ export default function RealTimeChat({
   const activeThread =
     filteredThreads.find((thread) => thread.id === activeThreadId) ?? defaultThreads[0] ?? null;
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     if (!serviceId) return;
 
     setIsLoading(true);
 
     try {
-      const response = await fetch(
-        `http://localhost:5254/api/v1/Messaging/GetServiceMessages?serviceId=${serviceId}`,
-        {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-          },
-        },
-      );
+      const messagingStore = useMessagingStore.getState();
+      const serviceMessages = await messagingStore.fetchServiceMessages(serviceId);
+      const fetchError = useMessagingStore.getState().error;
+      if (fetchError) throw new Error(fetchError);
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch messages: ${response.status}`);
-      }
-
-      const payload = await response.json();
-      const normalized = resolveResponseArray(payload)
+      const normalized = serviceMessages
         .map((item) => normalizeMessage(item, currentUserId))
         .filter((item): item is ChatMessage => Boolean(item));
 
@@ -185,17 +159,20 @@ export default function RealTimeChat({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentUserId, serviceId]);
 
   useEffect(() => {
-    void fetchMessages();
+    const initialFetchId = window.setTimeout(() => void fetchMessages(), 0);
 
     const intervalId = window.setInterval(() => {
       void fetchMessages();
     }, 3000);
 
-    return () => window.clearInterval(intervalId);
-  }, [serviceId, currentUserId]);
+    return () => {
+      window.clearTimeout(initialFetchId);
+      window.clearInterval(intervalId);
+    };
+  }, [fetchMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -208,22 +185,14 @@ export default function RealTimeChat({
     setIsSending(true);
 
     try {
-      const response = await fetch('http://localhost:5254/api/v1/Messaging/SendMessage', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          serviceId,
-          receiverId,
-          messageText: trimmed,
-        }),
+      const messagingStore = useMessagingStore.getState();
+      const result = await messagingStore.sendMessage({
+        serviceId,
+        recipientUserId: receiverId,
+        content: trimmed,
+        subject: trimmed,
       });
-
-      if (!response.ok) {
-        throw new Error(`Send failed: ${response.status}`);
-      }
+      if (!result) throw new Error(useMessagingStore.getState().error ?? 'Send failed.');
 
       setMessageInput('');
       await fetchMessages();
