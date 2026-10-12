@@ -8,6 +8,8 @@ import {
   ChevronDown,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Settings,
   UserCircle,
@@ -29,6 +31,7 @@ export default function AssessorHeader() {
   const locale = pathname.split("/").filter(Boolean)[0] || "en";
   const {
     sidebarCollapsed,
+    toggleSidebar,
     toggleMobileSidebar,
   } = useAssessorStore();
   const user = useAuthStore((state) => state.user);
@@ -68,6 +71,16 @@ export default function AssessorHeader() {
       <div className="flex h-full items-center justify-between px-4 sm:px-6">
         {/* Left */}
         <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="hidden h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 lg:flex"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+          </button>
+
           {/* Mobile Menu */}
           <button
             type="button"

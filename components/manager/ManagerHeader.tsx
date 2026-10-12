@@ -3,13 +3,15 @@
 import {
   Bell,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   UserCircle,
 } from "lucide-react";
 import { useManagerStore } from "@/store/managerStore";
 
 export default function ManagerHeader() {
-  const { sidebarCollapsed, toggleMobileSidebar } = useManagerStore();
+  const { sidebarCollapsed, toggleSidebar, toggleMobileSidebar } = useManagerStore();
 
   return (
     <header
@@ -19,6 +21,16 @@ export default function ManagerHeader() {
     >
       <div className="flex h-full items-center justify-between px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="hidden h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 lg:flex"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+          </button>
+
           <button
             type="button"
             onClick={toggleMobileSidebar}
