@@ -1,6 +1,7 @@
 import { create } from 'zustand';
+import useAuthStore from '@/modules/auth/auth.store';
 import { createNotification as createNotificationRequest, getDocumentMonitoringAlerts, getUnreadNotificationCount, getUserNotifications, markAllNotificationsAsRead, markNotificationAsRead, sendBulkNotifications as sendBulkNotificationsRequest } from './notification.endpoint';
-import { NotificationItem, NotificationCategory, NotificationApiItem, NotificationApiResponse, NotificationUnreadCountResponse, DocumentMonitoringAlertsResponse } from './notification.types';
+import { NotificationItem, NotificationCategory, DocumentMonitoringAlertsResponse } from './notification.types';
 
 const readFlag = (value: unknown): boolean => {
   if (value === true || value === 1) return true;
@@ -12,18 +13,6 @@ const readFlag = (value: unknown): boolean => {
   }
   return false;
 };
-
-const normalizeNotification = (item: NotificationApiItem): NotificationItem => ({
-  id: String(item.id ?? crypto.randomUUID()),
-  title: item.title ?? 'Notification',
-  description: item.description ?? 'No description provided.',
-  category: (item.category as NotificationCategory) ?? 'System',
-  time: item.time ?? 'Just now',
-  referenceId: item.referenceId ?? 'N/A',
-  isRead: readFlag(item.isRead),
-  isNew: readFlag(item.isNew),
-  priority: item.priority ?? undefined,
-});
 
 interface NotificationState {
   notifications: NotificationItem[];
@@ -52,6 +41,118 @@ interface NotificationState {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const readField = (value: Record<string, unknown>, ...names: string[]): unknown => {
+  const wantedNames = new Set(names.map((name) => name.toLowerCase()));
+  const key = Object.keys(value).find((candidate) => wantedNames.has(candidate.toLowerCase()));
+  return key ? value[key] : undefined;
+};
+
+const getCurrentUserId = (): string | number => {
+  const userId = useAuthStore.getState().user?.id;
+  if (userId === undefined || userId === null || String(userId).trim() === '') {
+    throw new Error('Your user ID is unavailable. Sign in again to load notifications.');
+  }
+  return userId;
+};
+
+const unwrapResponse = (value: unknown): unknown => {
+  let current = value;
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (!isRecord(current)) return current;
+    if (
+      readField(current, 'notifications') !== undefined ||
+      readField(current, 'items') !== undefined ||
+      readField(current, 'unreadCount') !== undefined
+    ) {
+      return current;
+    }
+    const nested = readField(current, 'data', 'payload', 'response', 'result');
+    if (nested === undefined || nested === current) return current;
+    current = nested;
+  }
+  return current;
+};
+
+const normalizeCategory = (value: unknown): NotificationCategory => {
+  if (typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value))) {
+    switch (Number(value)) {
+      case 1:
+      case 3:
+        return 'Service Updates';
+      case 2:
+        return 'Documents';
+      case 4:
+        return 'Payments';
+      case 5:
+        return 'System';
+      case 6:
+        return 'Messages';
+      default:
+        return 'System';
+    }
+  }
+
+  const category = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z]/g, '') : '';
+  if (category.includes('document')) return 'Documents';
+  if (category.includes('approval')) return 'Approvals';
+  if (category.includes('payment')) return 'Payments';
+  if (category.includes('inspection')) return 'Inspection';
+  if (category.includes('risk')) return 'Risk';
+  if (category.includes('message')) return 'Messages';
+  if (category.includes('service') || category.includes('status')) return 'Service Updates';
+  return 'System';
+};
+
+const formatNotificationTime = (value: unknown): string => {
+  if (typeof value !== 'string' || !value.trim()) return 'Time unavailable';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const elapsedMinutes = Math.round((date.getTime() - Date.now()) / 60_000);
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  if (Math.abs(elapsedMinutes) < 60) return formatter.format(elapsedMinutes, 'minute');
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+  if (Math.abs(elapsedHours) < 24) return formatter.format(elapsedHours, 'hour');
+  return formatter.format(Math.round(elapsedHours / 24), 'day');
+};
+
+const normalizeNotification = (value: unknown): NotificationItem | null => {
+  if (!isRecord(value)) return null;
+  const id = readField(value, 'id', 'notificationId');
+  if ((typeof id !== 'string' && typeof id !== 'number') || !String(id).trim()) return null;
+
+  const message = readField(value, 'description', 'message');
+  const title = readField(value, 'title');
+  const type = readField(value, 'category', 'type');
+  const createdDate = readField(value, 'time', 'createdDate', 'createAt');
+  const referenceId = readField(value, 'referenceId', 'serviceId');
+  const isRead = readFlag(readField(value, 'isRead'));
+  const isUrgent = readFlag(readField(value, 'isUrgent'));
+  const priority = readField(value, 'priority');
+
+  return {
+    id: String(id),
+    title: typeof title === 'string' && title.trim() ? title : 'Notification',
+    description: typeof message === 'string' && message.trim() ? message : 'No description provided.',
+    category: normalizeCategory(type),
+    time: formatNotificationTime(createdDate),
+    referenceId: referenceId === null || referenceId === undefined ? 'N/A' : String(referenceId),
+    isRead,
+    isNew: readFlag(readField(value, 'isNew')),
+    ...(isUrgent || priority === 'CRITICAL' || priority === 'HIGH'
+      ? { priority: priority === 'CRITICAL' ? 'CRITICAL' as const : 'HIGH' as const }
+      : {}),
+  };
+};
+
+const readNotificationList = (value: unknown): unknown[] => {
+  const payload = unwrapResponse(value);
+  if (Array.isArray(payload)) return payload;
+  if (!isRecord(payload)) return [];
+  const list = readField(payload, 'notifications', 'items', 'results');
+  return Array.isArray(list) ? list : [];
+};
 
 const normalizeDocumentMonitoringAlerts = (value: unknown): DocumentMonitoringAlertsResponse | null => {
   let candidate = value;
@@ -111,7 +212,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   markAllAsRead: async () => {
     try {
-      await markAllNotificationsAsRead();
+      await markAllNotificationsAsRead(getCurrentUserId());
       set((state) => ({
         notifications: state.notifications.map((notification) => ({
           ...notification,
@@ -159,19 +260,24 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      const response = await getUserNotifications();
-      const payload = response as unknown as NotificationApiResponse;
-      const list = Array.isArray(payload?.notifications) ? payload.notifications : [];
-      const notifications = list.map(normalizeNotification);
-      const unreadCount = typeof payload?.unreadCount === 'number'
-        ? payload.unreadCount
+      const response = await getUserNotifications(getCurrentUserId());
+      const payload = unwrapResponse(response);
+      const list = readNotificationList(payload);
+      const notifications = list
+        .map(normalizeNotification)
+        .filter((notification): notification is NotificationItem => notification !== null);
+      const unreadCountValue = isRecord(payload) ? readField(payload, 'unreadCount') : undefined;
+      const pageValue = isRecord(payload) ? readField(payload, 'page') : undefined;
+      const pageSizeValue = isRecord(payload) ? readField(payload, 'pageSize') : undefined;
+      const unreadCount = typeof unreadCountValue === 'number'
+        ? unreadCountValue
         : notifications.filter((notification) => !notification.isRead).length;
 
       set({
         notifications,
         unreadCount,
-        page: typeof payload?.page === 'number' ? payload.page : 1,
-        pageSize: typeof payload?.pageSize === 'number' ? payload.pageSize : 20,
+        page: typeof pageValue === 'number' ? pageValue : 1,
+        pageSize: typeof pageSizeValue === 'number' ? pageSizeValue : 20,
         loading: false,
         error: null,
       });
@@ -190,14 +296,14 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   fetchUnreadCount: async () => {
     try {
-      const response = await getUnreadNotificationCount();
-      const payload = response as unknown as NotificationUnreadCountResponse;
-      if (typeof payload?.unreadCount !== 'number' || !Number.isFinite(payload.unreadCount)) {
+      const response = unwrapResponse(await getUnreadNotificationCount(getCurrentUserId()));
+      const unreadCount = isRecord(response) ? readField(response, 'unreadCount') : undefined;
+      if (typeof unreadCount !== 'number' || !Number.isFinite(unreadCount)) {
         throw new Error('Unexpected unread notification count response.');
       }
 
-      set({ unreadCount: payload.unreadCount, error: null });
-      return payload.unreadCount;
+      set({ unreadCount, error: null });
+      return unreadCount;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unable to load unread notification count.';
       set({ error: message });

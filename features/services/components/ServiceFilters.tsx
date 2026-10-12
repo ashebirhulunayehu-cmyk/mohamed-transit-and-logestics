@@ -39,12 +39,19 @@ export function ServiceFilters() {
             className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer appearance-none"
           >
             <option value="ALL">All statuses</option>
+            <option value="Draft">Draft</option>
+            <option value="Submitted">Submitted</option>
+            <option value="Under review">Under review</option>
+            <option value="Approved">Approved</option>
             <option value="In progress">In progress</option>
             <option value="Needs review">Needs review</option>
             <option value="Requires customer action">Requires customer action</option>
             <option value="Pending">Pending</option>
             <option value="Blocked">Blocked</option>
             <option value="Completed">Completed</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Cancelled">Cancelled</option>
+            <option value="Delivered">Delivered</option>
           </select>
           <Filter className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
         </div>

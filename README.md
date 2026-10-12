@@ -20,6 +20,17 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Run the frontend and API
+
+The API source is in `backend/` and targets .NET 9. Install the .NET 9 SDK and Node.js dependencies, then start both development servers from the project root:
+
+```bash
+npm install
+npm run dev:all
+```
+
+The frontend runs at `http://localhost:3000` and the API at `http://localhost:5254`; the frontend uses that API URL by default. Use `npm run dev` or `npm run dev:api` to run either server separately. The API's `http` launch profile uses its local SQLite configuration. Database snapshots and uploaded profile files from the upstream repository are intentionally not included.
+
 ## Customer sidebar summary
 
 The customer layout loads its counters from `/api/customer/sidebar-summary`. The route

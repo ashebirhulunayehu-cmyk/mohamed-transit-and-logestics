@@ -229,12 +229,7 @@ export default function AssessorDashboardPage() {
     dashboardData?.totalComplianceIssues ??
     dashboardData?.complianceIssues ??
     countComplianceIssues(complianceIssues);
-  const dueDates = pendingReviewCases
-    .map((serviceCase) => Date.parse(serviceCase.sla))
-    .filter((timestamp) => Number.isFinite(timestamp));
-  const dueWithin48Hours = currentTime !== null && dueDates.length
-    ? dueDates.filter((timestamp) => timestamp >= currentTime && timestamp <= currentTime + 48 * 60 * 60 * 1000).length
-    : undefined;
+  const dueWithin48Hours = dashboardData?.dueWithin48Hours ?? undefined;
   const clearedThisMonth = assessmentLogsLoading || currentTime === null
     ? undefined
     : assessmentLogs.filter((log) => {
@@ -274,7 +269,7 @@ export default function AssessorDashboardPage() {
       description: 'Pending service reviews',
       icon: 'clock',
       tone: 'slate',
-      loading: reviewLoading || currentTime === null,
+      loading: dashboardLoading,
     },
     {
       title: 'Cleared this month',
@@ -316,6 +311,10 @@ export default function AssessorDashboardPage() {
       messageApi.error('This service does not have a valid shipment ID.');
       return;
     }
+    if (!isApproved && !reviewNotes.trim()) {
+      messageApi.error('A review note is required when rejecting a shipment.');
+      return;
+    }
 
     try {
       const result = await reviewCase({
@@ -323,9 +322,9 @@ export default function AssessorDashboardPage() {
         isApproved,
         reviewNotes: reviewNotes.trim() || null,
       });
-      await fetchDashboard();
+      await Promise.all([fetchDashboard(), fetchAssessmentLogs()]);
       messageApi.success(
-        `${result.trackingNumber || selectedReviewCase.id} ${isApproved ? 'approved' : 'returned for review'}.`,
+        `${result.trackingNumber || selectedReviewCase.id} ${isApproved ? 'approved' : 'rejected'}.`,
       );
       setSelectedReviewCase(null);
       setReviewNotes('');
@@ -416,7 +415,7 @@ export default function AssessorDashboardPage() {
                     <Statistic
                       title={<span className="text-xs font-semibold text-slate-500">{stat.title}</span>}
                       value={stat.value ?? '—'}
-                      valueStyle={{ color: '#020617', fontSize: 28, fontWeight: 600, lineHeight: 1.2 }}
+                      styles={{ content: { color: '#020617', fontSize: 28, fontWeight: 600, lineHeight: 1.2 } }}
                     />
                     <p className="mt-1 text-xs text-slate-400">{stat.description}</p>
                   </div>
@@ -436,7 +435,7 @@ export default function AssessorDashboardPage() {
               <div className="mt-1 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-950">Priority queue</h2>
-                  <p className="mt-1 text-sm text-slate-500">Sorted by risk channel and time in stage.</p>
+                  <p className="mt-1 text-sm text-slate-500">Prioritized by the recorded risk channel.</p>
                 </div>
                 <span className="shrink-0 text-xs font-medium text-slate-400">
                   {pendingReviewCases.length} record{pendingReviewCases.length === 1 ? '' : 's'}
@@ -454,13 +453,7 @@ export default function AssessorDashboardPage() {
                 })
                 .slice(0, 6)
                 .map((serviceCase) => {
-                  const statusTone = serviceCase.statusTag === 'Blocked'
-                    ? 'border-rose-200 bg-rose-50 text-rose-700'
-                    : serviceCase.statusTag === 'Signed off'
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : serviceCase.statusTag === 'Requires customer action'
-                        ? 'border-violet-200 bg-violet-50 text-violet-700'
-                        : 'border-amber-200 bg-amber-50 text-amber-800';
+                  const statusTone = 'border-amber-200 bg-amber-50 text-amber-800';
                   const channelTone = serviceCase.channel === 'Red channel'
                     ? 'border-rose-200 bg-rose-50 text-rose-700'
                     : serviceCase.channel === 'Yellow channel'
@@ -468,7 +461,7 @@ export default function AssessorDashboardPage() {
                       : serviceCase.channel === 'Green channel'
                         ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                         : 'border-slate-200 bg-slate-50 text-slate-600';
-                  const updatedAt = Date.parse(serviceCase.timeAgo);
+                  const updatedAt = Date.parse(serviceCase.updatedAt);
                   const updatedLabel = Number.isNaN(updatedAt)
                     ? 'Updated time unavailable'
                     : currentTime === null
@@ -480,13 +473,13 @@ export default function AssessorDashboardPage() {
                   return (
                     <article key={serviceCase.id} className="px-5 py-4 transition hover:bg-slate-50/70">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-xs font-semibold text-sky-800">{serviceCase.billOfLading}</span>
-                        <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${statusTone}`}>{serviceCase.statusTag}</span>
+                        <span className="font-mono text-xs font-semibold text-sky-800">{serviceCase.trackingNumber}</span>
+                        <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${statusTone}`}>{serviceCase.status}</span>
                         <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${channelTone}`}>{serviceCase.channel}</span>
                         <span className="ml-auto text-[11px] text-slate-400">{updatedLabel}</span>
                       </div>
                       <h3 className="mt-2 text-sm font-semibold text-slate-900">
-                        {serviceCase.title}{serviceCase.containerCount !== '-' ? ` — ${serviceCase.containerCount}` : ''}
+                        {serviceCase.title}
                       </h3>
                       <p className="mt-1 text-xs text-slate-500">
                         {serviceCase.importer} · {serviceCase.route}
@@ -638,7 +631,7 @@ export default function AssessorDashboardPage() {
                         <p className="mt-0.5 text-xs text-slate-400">{serviceCase.importer}</p>
                       </td>
                       <td className="px-5 py-4 font-mono text-xs text-slate-600">
-                        {serviceCase.billOfLading}
+                        {serviceCase.trackingNumber}
                       </td>
                       <td className="px-5 py-4 text-sm text-slate-600">{serviceCase.route}</td>
                       <td className="px-5 py-4 text-right">
@@ -673,7 +666,7 @@ export default function AssessorDashboardPage() {
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
               <Icon name="shield" size={13} />
             </span>
-            <span>All assessment activity is logged and auditable.</span>
+            <span>Activity shown here is limited to records returned by the assessment log API.</span>
           </div>
 
           <span>MOT Import Services · Assessment Directorate</span>
@@ -696,7 +689,7 @@ export default function AssessorDashboardPage() {
           loading={reviewLoading}
           onClick={() => void handleReviewService(false)}
         >
-          Return to executor
+          Reject shipment
         </Button>,
         <Button
           key="approve"
@@ -705,7 +698,7 @@ export default function AssessorDashboardPage() {
           loading={reviewLoading}
           onClick={() => void handleReviewService(true)}
         >
-          Approve stage
+          Approve shipment
         </Button>,
       ]}
     >
@@ -714,14 +707,14 @@ export default function AssessorDashboardPage() {
           <div>
             <p className="text-sm font-semibold text-slate-900">{selectedReviewCase.title}</p>
             <p className="text-xs text-slate-500">
-              {selectedReviewCase.billOfLading} · {selectedReviewCase.importer}
+              Shipment #{selectedReviewCase.shipmentId} · {selectedReviewCase.trackingNumber} · {selectedReviewCase.importer}
             </p>
           </div>
           <Input.TextArea
             value={reviewNotes}
             onChange={(event) => setReviewNotes(event.target.value)}
             rows={4}
-            placeholder="Valuation basis, documentary findings or reason for return."
+            placeholder="Documentary findings, approval basis, or required reason for rejection."
           />
         </div>
       )}

@@ -66,11 +66,20 @@ export interface UserMessage {
 	recordStatus?: number | null;
 }
 
+export interface MessageDirectoryUser {
+	id: string | number;
+	displayName: string;
+	roleNames: string[];
+}
+
 export interface SendMessageRequest {
-	serviceId: string | number;
-	recipientUserId: string | number;
+	shipmentId?: string | number;
+	serviceId?: string | number;
+	recipientId?: string | number;
+	recipientUserId?: string | number;
 	content: string;
 	subject: string;
+	type?: number;
 }
 
 export interface SendMessageResult {

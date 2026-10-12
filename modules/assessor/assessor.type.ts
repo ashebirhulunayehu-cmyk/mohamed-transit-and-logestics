@@ -11,9 +11,8 @@ export interface AssessorServiceReviewRequest {
 }
 
 export interface AssessorComplianceFeedbackRequest {
-  serviceId: string;
-  comment: string;
-  issueType?: string;
+  shipmentId: number;
+  feedback: string;
 }
 
 export interface AssessorReviewedService {
@@ -91,6 +90,14 @@ export interface AssessorDashboardMetrics {
 
 export interface AssessorDashboardSummary
   extends Pick<AssessorDashboardMetrics, "pendingCustomerApprovals" | "pendingServiceReviews"> {
+  verifiedCustomers: number;
+  returnedCustomersForRevision: number;
+  pendingCustomerDocuments: number;
+  medianCustomerDecisionDays: number | null;
+  openCases: number;
+  needsAttention: number;
+  dueWithin48Hours: number | null;
+  clearedThisMonth: number;
   totalComplianceIssues?: number;
   complianceIssues?: number;
   servicesUnderOversight: number;
@@ -135,6 +142,9 @@ export interface PendingCustomerApproval {
   businessType?: string;
   licence?: string;
   businessLicense?: string;
+  importLicense?: string;
+  importLicenseExpiry?: string | null;
+  verificationNotes?: string | null;
   tin?: string;
   tinNumber?: string;
   status?: string;
@@ -151,6 +161,18 @@ export interface PendingCustomerApproval {
   state?: string;
   registeredDate?: string;
   activeServices?: number;
+  isReturnedForRevision?: boolean;
+  documents?: Array<{
+    id?: string | number;
+    originalFileName?: string;
+    documentType?: string | number;
+    isRequired?: boolean;
+    isVerified?: boolean;
+    expiryDate?: string | null;
+    verificationNotes?: string | null;
+    createAt?: string;
+    updatedAt?: string | null;
+  }>;
   checklist?: Array<{
     id?: string | number;
     name?: string;
@@ -175,6 +197,62 @@ export interface PendingServiceReview {
   status?: string;
   [key: string]: unknown;
 }
+
+export type ApprovalStatus =
+  | "Pending check"
+  | "Verified"
+  | "Rejected"
+  | "Flagged"
+  | "Returned for revision"
+  | "Expired";
+
+export interface ApprovalChecklistItem {
+  id: string;
+  name: string;
+  documentType: string;
+  status: ApprovalStatus;
+  isRequired: boolean;
+  expiryDate: string | null;
+  isExpired: boolean;
+  isVerified: boolean;
+  verificationNotes: string | null;
+  submittedAt: string | null;
+}
+
+export interface ApprovalApplicant {
+  id: string;
+  name: string;
+  importerType: string;
+  licence: string;
+  importLicense: string;
+  importLicenseExpiry: string | null;
+  tin: string;
+  status: ApprovalStatus;
+  primaryContact: string;
+  email: string;
+  phone: string;
+  address: string;
+  registeredDate: string;
+  activeServices: number | null;
+  checklist: ApprovalChecklistItem[];
+  isReturnedForRevision: boolean;
+  verificationNotes: string | null;
+}
+
+export type ApprovalFilterStatus = "All" | ApprovalStatus;
+
+export interface ApprovalCounts {
+  all: number;
+  pending: number;
+  returned: number;
+}
+
+export interface VerifyCustomerDocumentRequest {
+  documentId: number;
+  isVerified: boolean;
+  notes?: string;
+}
+
 
 export type AssessorListResponse<T> = AssessorApiEnvelope<T[]>;
 export type AssessorDashboardResponse = AssessorApiEnvelope<AssessorDashboardSummary>;

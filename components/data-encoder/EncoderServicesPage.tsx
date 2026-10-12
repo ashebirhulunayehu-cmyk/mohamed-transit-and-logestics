@@ -20,6 +20,7 @@ type ServiceRecord = Record<string, unknown>;
 
 interface DisplayService {
 	id: string;
+	databaseId: string;
 	description: string;
 	importer: string;
 	customerReference: string;
@@ -168,22 +169,30 @@ const normalizeServiceStatus = (value: unknown): string => {
 		if (/^\d+$/.test(normalized)) {
 			return normalizeServiceStatus(Number(normalized));
 		}
+		if (normalized === "deliverd" || normalized === "delivered") return "Delivered";
+		if (normalized.replaceAll(/[\s_-]+/g, "") === "underreview") return "Under review";
 		if (normalized.includes("block")) return "Blocked";
 		if (normalized.includes("review")) return "Needs review";
-		if (normalized.includes("complete") || normalized.includes("approv")) return "Completed";
+		if (normalized.includes("complete")) return "Completed";
+		if (normalized.includes("approv")) return "Approved";
 		if (normalized.includes("progress")) return "In progress";
 		if (normalized.includes("action")) return "Requires customer action";
 		if (normalized.includes("pending")) return "Pending";
 		return status;
 	}
 
-	const status = Number(value);
-	if (status === 1) return "Pending";
-	if (status === 2) return "In progress";
-	if (status === 3) return "Needs review";
-	if (status === 4) return "Completed";
-	if (status === 5) return "Blocked";
-	return "—";
+	const statuses: Record<number, string> = {
+		1: "Draft",
+		2: "Submitted",
+		3: "Under review",
+		4: "Approved",
+		5: "In progress",
+		6: "Completed",
+		7: "Rejected",
+		8: "Cancelled",
+		9: "Delivered",
+	};
+	return statuses[Number(value)] ?? "—";
 };
 
 const normalizeRiskChannel = (value: unknown): string => {
@@ -201,11 +210,13 @@ const normalizeRiskChannel = (value: unknown): string => {
 		return risk;
 	}
 
-	const risk = Number(value);
-	if (risk >= 3) return "Red channel";
-	if (risk === 2) return "Yellow channel";
-	if (risk === 1) return "Green channel";
-	return "Blue channel";
+	const risks: Record<number, string> = {
+		1: "Blue channel",
+		2: "Green channel",
+		3: "Yellow channel",
+		4: "Red channel",
+	};
+	return risks[Number(value)] ?? "Unassigned";
 };
 
 const readUserName = (value: unknown): string => {
@@ -251,6 +262,7 @@ const toDisplayService = (record: ServiceRecord): DisplayService => {
 			findValue(record, "trackingNumber", "serviceNumber", "serviceReference", "referenceNumber", "reference"),
 			findValue(record, "serviceId", "id"),
 		) || "—",
+		databaseId: readText(findValue(record, "serviceId", "id")),
 		description: readText(
 			findValue(record, "description", "itemDescription", "serviceDescription", "goodsDescription"),
 			readNoteField(notes, "Goods description"),
@@ -265,9 +277,9 @@ const toDisplayService = (record: ServiceRecord): DisplayService => {
 			noteTin,
 		),
 		mode:
-			rawModeValue === 0 || rawMode === "0"
+			rawModeValue === 1 || rawMode === "1" || rawMode.toLowerCase().includes("multi")
 				? "Multimodal"
-				: rawModeValue === 1 || rawMode === "1"
+				: rawModeValue === 2 || rawMode === "2" || rawMode.toLowerCase().includes("uni")
 					? "Unimodal"
 					: rawMode || "—",
 		status: normalizeServiceStatus(rawStatus),
@@ -358,7 +370,7 @@ export default function EncoderServicesPage() {
 		const target = query.trim().toLowerCase();
 		return services.filter((service) => {
 			const matchesQuery = !target ||
-				`${service.id} ${service.importer} ${service.customerReference} ${service.caseOwner}`
+				`${service.id} ${service.databaseId} ${service.importer} ${service.customerReference} ${service.caseOwner}`
 					.toLowerCase()
 					.includes(target);
 			return matchesQuery &&
@@ -515,16 +527,16 @@ export default function EncoderServicesPage() {
 				)}
 
 				<div className="overflow-x-auto">
-					<table className="w-full min-w-[1160px] table-fixed border-separate border-spacing-0">
+					<table className="w-full min-w-[760px] table-fixed border-separate border-spacing-0">
 						<colgroup>
-							<col className="w-[180px]" />
-							{visibleColumns.importer && <col className="w-[230px]" />}
-							{visibleColumns.mode && <col className="w-[125px]" />}
-							{visibleColumns.status && <col className="w-[190px]" />}
-							{visibleColumns.risk && <col className="w-[155px]" />}
-							{visibleColumns.caseOwner && <col className="w-[165px]" />}
-							{visibleColumns.eta && <col className="w-[125px]" />}
-							{visibleColumns.sla && <col className="w-[105px]" />}
+							<col className="w-[190px]" />
+							{visibleColumns.importer && <col className="w-[210px]" />}
+							{visibleColumns.mode && <col className="w-[115px]" />}
+							{visibleColumns.status && <col className="w-[155px]" />}
+							{visibleColumns.risk && <col className="w-[135px]" />}
+							{visibleColumns.caseOwner && <col className="w-[150px]" />}
+							{visibleColumns.eta && <col className="w-[110px]" />}
+							{visibleColumns.sla && <col className="w-[100px]" />}
 							{visibleColumns.updated && <col className="w-[135px]" />}
 						</colgroup>
 						<thead>
@@ -549,17 +561,21 @@ export default function EncoderServicesPage() {
 						<tbody>
 							{sortedServices.map((service) => (
 								<tr key={`${service.id}-${service.customerReference}`} className="group border-t border-slate-200 bg-white hover:bg-slate-50/80">
-									<td className="sticky left-0 z-[1] bg-white px-5 py-4 align-middle group-hover:bg-slate-50/80">
-										<p className="whitespace-nowrap font-mono text-[12px] font-semibold text-blue-800">{service.id}</p>
+									<td className="sticky left-0 z-[1] bg-white px-4 py-4 align-middle group-hover:bg-slate-50/80 sm:px-5">
+										<p className="max-w-full truncate font-mono text-[12px] font-semibold text-blue-800" title={service.id}>{service.id}</p>
 										{service.description && <p className="mt-1 max-w-[250px] truncate text-xs text-slate-500" title={service.description}>{service.description}</p>}
 									</td>
 									{visibleColumns.importer && <td className="px-5 py-4 align-middle">
-										<div className="min-w-[180px]">
-											<p className="mt-1 max-w-[260px] truncate text-sm text-slate-700">{service.importer}</p>
+										<div className="min-w-0">
+											<p className="max-w-full truncate text-sm text-slate-700" title={service.importer}>{service.importer}</p>
 											{service.customerReference && <p className="text-xs text-slate-500">{service.customerReference}</p>}
 										</div>
 									</td>}
-									{visibleColumns.mode && <td className="px-5 py-4 text-sm text-slate-600">{service.mode}</td>}
+									{visibleColumns.mode && <td className="px-4 py-4 sm:px-5">
+										{service.mode === "—"
+											? <span className="text-sm text-slate-400">—</span>
+											: <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-100">{service.mode}</span>}
+									</td>}
 									{visibleColumns.status && <td className="px-5 py-4">
 										{service.status === "—"
 											? <span className="text-sm text-slate-400">—</span>

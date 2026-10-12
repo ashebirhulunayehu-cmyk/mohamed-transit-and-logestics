@@ -1,7 +1,6 @@
 "use client";
 
 import useAuthStore from "@/modules/auth/auth.store";
-import { useProfileStore } from "../profile.store";
 
 type AuthUserWithRole = {
   roleName?: string;
@@ -30,19 +29,18 @@ interface AccountDetailsCardProps {
 
 export default function AccountDetailsCard({ profile }: AccountDetailsCardProps) {
   const authUser = useAuthStore((state) => state.user) as AuthUserWithRole | null;
-  const { fullName, role, branch, userId } = useProfileStore();
 
   const resolvedFullName = authUser?.firstName || authUser?.lastName
     ? `${authUser?.firstName || ""} ${authUser?.lastName || ""}`.trim()
-    : authUser?.username || fullName;
+    : authUser?.username || "Not provided";
 
-  const resolvedRole = authUser?.roleName || role;
-  const resolvedUserId = authUser?.id ? String(authUser.id) : userId;
+  const resolvedRole = authUser?.roleName || "Not provided";
+  const resolvedUserId = authUser?.id ? String(authUser.id) : "Not provided";
 
   const details = [
     { label: "Full name", value: profile?.fullName || resolvedFullName },
     { label: "Role", value: profile?.role || resolvedRole },
-    { label: "Branch", value: profile?.branch || branch },
+    { label: "Branch", value: profile?.branch || "Not provided" },
     { label: "User ID", value: profile?.userId || resolvedUserId },
     ...(profile?.email ? [{ label: "Email", value: profile.email }] : []),
     ...(profile?.phone ? [{ label: "Phone", value: profile.phone }] : []),

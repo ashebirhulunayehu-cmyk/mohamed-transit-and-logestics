@@ -3,8 +3,7 @@
 import React from "react";
 import { useEffect } from "react";
 import { useServiceReviewStore } from "../serviceReview.store";
-import { Search, Lock, Clock, RefreshCw } from "lucide-react";
-import { CaseStatusTag } from "../serviceReview.types";
+import { Search, Clock, RefreshCw } from "lucide-react";
 
 export function ServiceReviewQueue() {
   const {
@@ -29,32 +28,6 @@ export function ServiceReviewQueue() {
       c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.importer.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const renderStatusBadge = (status: CaseStatusTag) => {
-    switch (status) {
-      case "Requires customer action":
-        return (
-          <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-500"></span>
-            {status}
-          </span>
-        );
-      case "Blocked":
-        return (
-          <span className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
-            <Lock className="w-3 h-3 text-rose-500" />
-            {status}
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-            <Clock className="w-3 h-3 text-amber-600" />
-            {status}
-          </span>
-        );
-    }
-  };
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
@@ -128,14 +101,23 @@ export function ServiceReviewQueue() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-sky-700">{item.id}</span>
-                {renderStatusBadge(item.statusTag)}
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                  <Clock className="h-3 w-3 text-amber-600" />
+                  {item.status}
+                </span>
               </div>
-              <span className="text-xs text-slate-400">{item.timeAgo}</span>
+              <span className="text-xs text-slate-400">
+                {item.updatedAt === "Not recorded"
+                  ? item.updatedAt
+                  : new Date(item.updatedAt).toLocaleString()}
+              </span>
             </div>
             <h3 className="text-sm font-semibold text-slate-900 mt-1.5">
-              {item.title} — {item.containerCount}
+              {item.title}
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">{item.importer}</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {item.importer} · {item.trackingNumber}
+            </p>
           </div>
         ))}
       </div>

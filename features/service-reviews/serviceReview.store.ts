@@ -1,8 +1,13 @@
 "use client";
 
 import { create } from "zustand";
-import { EvidenceFile, ServiceCase, ServiceReviewStats } from "./serviceReview.types";
-import { AssessorEndpoints } from "@/modules/assessor/assessor.endpoint.ts";
+import {
+  EvidenceFile,
+  RiskChannel,
+  ServiceCase,
+  ServiceReviewStats,
+} from "./serviceReview.types";
+import { AssessorEndpoints } from "@/modules/assessor/assessor.endpoint";
 import type {
   AssessorReviewedService,
   AssessorServiceReviewRequest,
@@ -134,103 +139,228 @@ const unwrapDocumentList = (value: unknown): Record<string, unknown>[] => {
   throw new Error("The service documents response did not contain a document list.");
 };
 
-const getRelatedName = (value: unknown): string => {
-  if (!isRecord(value)) return "";
-  return readText(
-    readField(value, "businessName", "name", "username", "fullName"),
-    "",
-  );
+const formatEnum = (value: unknown, entries: Record<number, string>): string => {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (Number.isInteger(numericValue) && entries[numericValue]) {
+    return entries[numericValue];
+  }
+
+  return typeof value === "string" && value.trim()
+    ? value.replace(/([a-z])([A-Z])/g, "$1 $2")
+    : "Not recorded";
+};
+
+const documentTypeNames: Record<number, string> = {
+  1: "Invoice",
+  2: "Bank receipt",
+  3: "Delivery order",
+  4: "Inspection report",
+  5: "Clearance document",
+  6: "Transport license",
+  7: "Arrival photo",
+  8: "Store receipt",
+  9: "Legal document",
+  10: "Other",
+};
+
+const stageNames: Record<number, string> = {
+  1: "Prepayment invoice",
+  2: "Transit permission",
+  3: "Amendment",
+  4: "Drop risk",
+  5: "Delivery order",
+  6: "Warehouse status",
+  7: "Inspection",
+  8: "Assessment and tax payment",
+  9: "Emergency",
+  10: "Exit and storage payment",
+  11: "Transportation",
+  12: "Local permission",
+  13: "Arrival",
+  14: "Clearance",
+};
+
+const getDocumentType = (document: Record<string, unknown>): string => {
+  const rawType = readField(document, "documentType", "type");
+  const typeIndex = typeof rawType === "number" ? rawType : Number(rawType);
+  return documentTypeNames[typeIndex] ?? readText(rawType, "Document");
+};
+
+const normalizeDocuments = (
+  value: unknown,
+  source: EvidenceFile["source"],
+): EvidenceFile[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter(isRecord).map((document, index) => {
+    const rawId = readField(document, "id", "documentId");
+    const documentId = rawId == null ? "" : String(rawId).trim();
+    const rawExpiry = readField(document, "expiryDate");
+    const expiryDate = typeof rawExpiry === "string" ? rawExpiry : undefined;
+    const isExpired = Boolean(
+      expiryDate && new Date(expiryDate).getTime() < Date.now(),
+    );
+
+    return {
+      id: `${source.toLowerCase()}-${documentId || index}`,
+      documentId: source === "Service" ? documentId || undefined : undefined,
+      name: readText(
+        readField(document, "originalFileName", "fileName", "name"),
+        `Document ${index + 1}`,
+      ),
+      type: getDocumentType(document),
+      source,
+      description: readText(readField(document, "description"), "") || undefined,
+      size: readText(readField(document, "fileSizeBytes"), "") || undefined,
+      mimeType: readText(readField(document, "mimeType"), "") || undefined,
+      isRequired: readField(document, "isRequired") === true,
+      isVerified: readField(document, "isVerified") === true,
+      verificationNotes:
+        readText(readField(document, "verificationNotes"), "") || undefined,
+      submittedAt:
+        readText(readField(document, "createAt", "createdDate"), "") || undefined,
+      expiryDate,
+      isExpired,
+    };
+  });
 };
 
 const normalizeService = (record: Record<string, unknown>): ServiceCase | null => {
-  const rawId = readField(record, "id", "serviceId", "shipmentId");
-  const numericId = Number(rawId);
-  const shipmentId = Number.isInteger(numericId) && numericId > 0 ? numericId : undefined;
-  const trackingNumber = readText(
-    readField(record, "trackingNumber", "serviceNumber", "referenceNumber", "reference"),
-    shipmentId ? `Service ${shipmentId}` : "Service record",
+  const rawId = readField(record, "id", "shipmentId");
+  const shipmentId = Number(rawId);
+  if (!Number.isInteger(shipmentId) || shipmentId <= 0) return null;
+
+  const customerValue = readField(record, "customer");
+  const customer = isRecord(customerValue) ? customerValue : {};
+  const importerValue = readField(record, "importer");
+  const importer = isRecord(importerValue) ? importerValue : {};
+  const executorValue = readField(record, "assignedCaseExecutor");
+  const executor = isRecord(executorValue) ? executorValue : {};
+  const firstName = readText(readField(importer, "firstName"), "");
+  const lastName = readText(readField(importer, "lastName"), "");
+  const importerName = [firstName, lastName].filter(Boolean).join(" ");
+  const origin = readText(readField(record, "origin"), "");
+  const destination = readText(readField(record, "destination"), "");
+  const rawMode = readField(record, "mode");
+  const rawRisk = readField(record, "riskLevel");
+  const rawStatus = readField(record, "status");
+  const rawStages = readField(record, "stages");
+  const stages = Array.isArray(rawStages) ? rawStages.filter(isRecord) : [];
+  const stageLabels = stages.map((stage) => {
+    const stageValue = readField(stage, "stage");
+    const stageNumber = typeof stageValue === "number" ? stageValue : Number(stageValue);
+    const stageName = stageNames[stageNumber] ?? formatEnum(stageValue, {});
+    const stageStatus = formatEnum(readField(stage, "status"), {
+      1: "Not started",
+      2: "Pending",
+      3: "In progress",
+      4: "Completed",
+      5: "Blocked",
+      6: "Needs review",
+    });
+    return `${stageName} — ${stageStatus}`;
+  });
+  const rawServiceDocuments = readField(record, "documents");
+  const customerDocuments = normalizeDocuments(
+    readField(customer, "documents"),
+    "Customer",
   );
-  const id = readText(rawId, trackingNumber);
-  const description = readText(
-    readField(record, "description", "itemDescription", "commodity", "goodsDescription", "serviceTypeName", "notes"),
-    trackingNumber,
-  );
-  const origin = readText(readField(record, "origin", "originName", "countryOfOrigin"), "-");
-  const destination = readText(readField(record, "destination", "destinationName", "routeCategory"), "-");
-  const modeNames = ["Road", "Sea", "Air"];
-  const rawMode = readField(record, "mode", "transportMode");
-  const modeIndex = typeof rawMode === "number" ? rawMode : Number(rawMode);
-  const mode = Number.isInteger(modeIndex)
-    ? modeNames[modeIndex] ?? readText(rawMode, "Other")
-    : readText(rawMode, "Other");
-  const relatedImporter = readField(record, "importer", "customer", "importerCustomer");
-  const documentsValue = readField(record, "documents", "serviceDocuments", "attachments");
-  const documents = Array.isArray(documentsValue) ? documentsValue : [];
-  const rawChannel = readField(record, "channel", "riskChannel", "riskCategory");
-  const channelText = readText(rawChannel, "Unassigned");
-  const channels: ServiceCase["channel"][] = [
-    "Red channel",
-    "Yellow channel",
-    "Green channel",
-    "Unassigned",
-  ];
-  const channel = channels.find(
-    (item) => item.toLowerCase() === channelText.toLowerCase(),
-  ) ?? "Unassigned";
-  const rawStatus = readText(readField(record, "status", "serviceStatus", "reviewStatus"), "");
-  const statusTag: ServiceCase["statusTag"] = /signed.?off|approved|completed/i.test(rawStatus)
-    ? "Signed off"
-    : /blocked|rejected/i.test(rawStatus)
-      ? "Blocked"
-      : /customer action|returned/i.test(rawStatus)
-        ? "Requires customer action"
-        : "Needs review";
+  const serviceDocuments = normalizeDocuments(rawServiceDocuments, "Service");
+  const shipmentStatus = formatEnum(rawStatus, {
+    1: "Draft",
+    2: "Submitted",
+    3: "Under review",
+    4: "Approved",
+    5: "In progress",
+    6: "Completed",
+    7: "Rejected",
+    8: "Cancelled",
+    9: "Delivered",
+  });
+  const rawDeclaredValue = readField(record, "declaredValue");
+  const declaredValue =
+    typeof rawDeclaredValue === "number" || typeof rawDeclaredValue === "string"
+      ? String(rawDeclaredValue)
+      : "Not recorded";
+  const rawCreatedAt = readField(record, "createAt");
+  const rawUpdatedAt = readField(record, "updatedAt");
+  const createdAt =
+    typeof rawCreatedAt === "string" ? rawCreatedAt : "Not recorded";
+  const updatedAt =
+    typeof rawUpdatedAt === "string" ? rawUpdatedAt : createdAt;
+  const riskText = formatEnum(rawRisk, {
+    1: "Blue channel",
+    2: "Green channel",
+    3: "Yellow channel",
+    4: "Red channel",
+  });
+  const channel: RiskChannel =
+    riskText === "Blue channel" ||
+    riskText === "Green channel" ||
+    riskText === "Yellow channel" ||
+    riskText === "Red channel"
+      ? riskText
+      : "Unassigned";
+  const rawHub = readField(record, "assignedHub");
 
   return {
-    id,
+    id: String(shipmentId),
     shipmentId,
-    title: description,
-    containerCount: readText(readField(record, "containerCount", "numberOfContainers"), "-"),
-    importer:
-      getRelatedName(relatedImporter) ||
-      readText(readField(record, "importerName", "customerName", "businessName", "contactPerson", "email"), "Importer"),
-    route: `${origin} → ${destination}`,
-    statusTag,
+    trackingNumber: readText(readField(record, "trackingNumber"), "Not recorded"),
+    title: readText(readField(record, "description"), "No goods description recorded"),
+    importer: readText(
+      readField(customer, "businessName"),
+      importerName || readText(readField(importer, "username"), "Not recorded"),
+    ),
+    importerId: Number(readField(record, "importerId")),
+    businessName: readText(readField(customer, "businessName"), "Not recorded"),
+    tinNumber: readText(readField(customer, "tinNumber"), "Not recorded"),
+    businessLicense: readText(readField(customer, "businessLicense"), "Not recorded"),
+    importLicense: readText(readField(customer, "importLicense"), "Not recorded"),
+    importLicenseExpiry:
+      readText(readField(customer, "importLicenseExpiry"), "Not recorded"),
+    businessType: readText(readField(customer, "businessType"), "Not recorded"),
+    businessAddress: readText(readField(customer, "businessAddress"), "Not recorded"),
+    contactPerson: readText(readField(customer, "contactPerson"), "Not recorded"),
+    contactEmail: readText(
+      readField(customer, "contactEmail"),
+      readText(readField(importer, "email"), "Not recorded"),
+    ),
+    contactPhone: readText(
+      readField(customer, "contactPhone"),
+      readText(readField(importer, "phone"), "Not recorded"),
+    ),
+    customerIsVerified:
+      typeof readField(customer, "isVerified") === "boolean"
+        ? readField(customer, "isVerified") as boolean
+        : null,
+    route: `${origin || "Not recorded"} → ${destination || "Not recorded"}`,
+    origin: origin || "Not recorded",
+    destination: destination || "Not recorded",
+    countryOfOrigin: readText(readField(record, "countryOfOrigin"), "Not recorded"),
+    routeCategory: readText(readField(record, "routeCategory"), "Not recorded"),
+    status: shipmentStatus,
+    assignedHub: formatEnum(rawHub, { 1: "Djibouti", 2: "Mojo", 3: "Adama" }),
+    mode: formatEnum(rawMode, { 1: "Multimodal sea/rail", 2: "Unimodal road" }),
+    declaredValue,
+    taxCategory: readText(readField(record, "taxCategory"), "Not recorded"),
+    riskLevel: riskText,
     channel,
-    commodity: description,
-    hsCode: readText(readField(record, "hsCode", "hsCodeNumber"), "-"),
-    declaredValue: readText(readField(record, "declaredValue", "value"), "-"),
-    incoterm: readText(readField(record, "incoterm", "termsOfTrade"), "-"),
-    billOfLading: trackingNumber,
-    caseExecutor:
-      getRelatedName(readField(record, "assignedCaseExecutor", "caseExecutor")) ||
-      readText(readField(record, "caseExecutorName", "assignedCaseExecutorName"), "Unassigned"),
-    currentStage: readText(readField(record, "currentStage", "stageName"), "Review"),
-    sla: readText(readField(record, "sla", "slaDueDate"), "-"),
-    mode,
-    timeAgo: readText(readField(record, "updatedAt", "createAt", "createdAt"), ""),
-    evidenceFiles: documents.filter(isRecord).map((document, index) => {
-      const rawDocumentId = readField(document, "id", "documentId");
-      const documentId = rawDocumentId == null ? "" : String(rawDocumentId).trim();
-      return {
-        id: documentId || `unavailable-${index}`,
-        documentId: documentId || undefined,
-        name: readText(readField(document, "fileName", "name", "documentName"), `Document ${index + 1}`),
-        type: readText(readField(document, "documentType", "type"), "Document"),
-        url: (() => {
-          const url = readField(document, "url", "fileUrl", "downloadUrl");
-          return typeof url === "string" ? url : undefined;
-        })(),
-      };
-    }),
+    caseExecutor: [readField(executor, "firstName"), readField(executor, "lastName")]
+      .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+      .join(" ") || "Not assigned",
+    stages: stageLabels,
+    registeredDate: createdAt,
+    updatedAt,
+    evidenceFiles: [...customerDocuments, ...serviceDocuments],
   };
 };
 
 const emptyStats: ServiceReviewStats = {
   awaitingReview: 0,
   redChannel: 0,
-  submittedForReview: 0,
-  signedOff: 0,
+  withDocuments: 0,
+  unverifiedDocuments: 0,
 };
 
 export const useServiceReviewStore = create<ServiceReviewStore>((set, get) => ({
@@ -259,7 +389,12 @@ export const useServiceReviewStore = create<ServiceReviewStore>((set, get) => ({
           ...emptyStats,
           awaitingReview: cases.length,
           redChannel: cases.filter((item) => item.channel === "Red channel").length,
-          submittedForReview: cases.length,
+          withDocuments: cases.filter((item) => item.evidenceFiles.length > 0).length,
+          unverifiedDocuments: cases.reduce(
+            (count, item) =>
+              count + item.evidenceFiles.filter((file) => !file.isVerified).length,
+            0,
+          ),
         },
         loading: false,
       });
@@ -285,14 +420,17 @@ export const useServiceReviewStore = create<ServiceReviewStore>((set, get) => ({
             readField(document, "fileName", "name", "documentName", "originalFileName"),
             `Document ${index + 1}`,
           ),
-          type: readText(
-            readField(document, "documentType", "type", "contentType", "mimeType"),
-            "Document",
-          ),
-          url: (() => {
-            const value = readField(document, "url", "fileUrl", "downloadUrl");
-            return typeof value === "string" ? value : undefined;
-          })(),
+          type: getDocumentType(document),
+          source: "Service" as const,
+          description: readText(readField(document, "description"), "") || undefined,
+          size: readText(readField(document, "fileSizeBytes"), "") || undefined,
+          mimeType: readText(readField(document, "mimeType"), "") || undefined,
+          isRequired: readField(document, "isRequired") === true,
+          isVerified: readField(document, "isVerified") === true,
+          verificationNotes:
+            readText(readField(document, "verificationNotes"), "") || undefined,
+          submittedAt:
+            readText(readField(document, "createAt", "createdDate"), "") || undefined,
         };
       });
 
@@ -318,7 +456,7 @@ export const useServiceReviewStore = create<ServiceReviewStore>((set, get) => ({
           reviewedService,
           cases,
           selectedCaseId: cases[0]?.id ?? null,
-          stats: { ...state.stats, awaitingReview: cases.length, submittedForReview: cases.length },
+          stats: { ...state.stats, awaitingReview: cases.length },
           loading: false,
         };
       });

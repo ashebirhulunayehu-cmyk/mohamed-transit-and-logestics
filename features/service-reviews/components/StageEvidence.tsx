@@ -3,18 +3,16 @@
 import React, { useState } from "react";
 import { EvidenceFile } from "../serviceReview.types";
 import { Download, FileText, LoaderCircle } from "lucide-react";
-import { AssessorEndpoints } from "@/modules/assessor/assessor.endpoint.ts";
+import { AssessorEndpoints } from "@/modules/assessor/assessor.endpoint";
 
 interface StageEvidenceProps {
   files: EvidenceFile[];
-  currentStage: string;
   loading?: boolean;
   error?: string | null;
 }
 
 export function StageEvidence({
   files,
-  currentStage,
   loading = false,
   error = null,
 }: StageEvidenceProps) {
@@ -88,7 +86,9 @@ export function StageEvidence({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold text-slate-900">Stage evidence</h3>
-          <p className="mt-1 text-xs text-slate-500">Documents attached to {currentStage}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Customer and service documents associated with this shipment. A download is available only for service documents.
+          </p>
         </div>
         <button
           type="button"
@@ -114,13 +114,14 @@ export function StageEvidence({
             Could not download document: {downloadError}
           </p>
         )}
-        {loading ? (
-          <p role="status" className="rounded border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-500">
-            Loading service documents...
-          </p>
-        ) : error ? (
+        {error && (
           <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-800">
             Could not load service documents: {error}
+          </p>
+        )}
+        {loading && files.length === 0 ? (
+          <p role="status" className="rounded border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-500">
+            Loading service documents...
           </p>
         ) : files.length === 0 ? (
           <p className="rounded border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-500">
@@ -133,11 +134,24 @@ export function StageEvidence({
           >
             <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-800">{file.name}</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">{file.type}</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                {file.type} · {file.source} document · {file.isRequired ? "Required" : "Not marked required"} · {file.isExpired ? "Expired" : file.isVerified ? "Verified" : "Unverified"}
+              </p>
+              {file.description && <p className="mt-1 text-[11px] text-slate-500">{file.description}</p>}
+              {(file.mimeType || file.size) && (
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {file.mimeType ? `MIME: ${file.mimeType}` : ""}
+                  {file.mimeType && file.size ? " · " : ""}
+                  {file.size ? `Size: ${file.size} bytes` : ""}
+                </p>
+              )}
+              {file.submittedAt && <p className="mt-1 text-[11px] text-slate-400">Submitted: {new Date(file.submittedAt).toLocaleString()}</p>}
+              {file.expiryDate && <p className="mt-1 text-[11px] text-slate-400">Expires: {new Date(file.expiryDate).toLocaleDateString()}</p>}
+              {file.verificationNotes && <p className="mt-1 text-[11px] text-slate-600">Verification note: {file.verificationNotes}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <FileText aria-hidden="true" className="w-4 h-4 text-slate-400" />
-              <button
+              {file.source === "Service" && <button
                 type="button"
                 onClick={() => void handleDownload(file)}
                 disabled={!file.documentId || downloadingId !== null || downloadingAll}
@@ -148,7 +162,7 @@ export function StageEvidence({
                 {downloadingId === file.id
                   ? <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />
                   : <Download aria-hidden="true" className="h-4 w-4" />}
-              </button>
+              </button>}
             </div>
           </div>
         ))}

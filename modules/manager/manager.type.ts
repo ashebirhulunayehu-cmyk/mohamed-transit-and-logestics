@@ -174,10 +174,43 @@ export interface ManagerDashboardSummary {
   pendingServices: number;
   inProgressServices: number;
   completedServices: number;
+  openCases?: number;
+  needsAttention?: number;
+  dueWithin48Hours?: number | null;
+  clearedThisMonth?: number;
   totalCustomers: number;
   verifiedCustomers: number;
   totalStaff: number;
   activeStaff: number;
   recentServices: ManagerRecentService[];
   monthlyServiceStats: ManagerMonthlyServiceStat[];
+}
+
+export interface ManagerReportsAnalytics {
+  openCases: number;
+  completedYearToDate: number;
+  onTimeClearanceRate: number | null;
+  averageStageDurationHours: number | null;
+  monthlyThroughput: {
+    year: number;
+    month: number;
+    multimodal: number;
+    unimodal: number;
+    completed: number;
+  }[];
+  riskChannels: {
+    channel: string;
+    count: number;
+  }[];
+  stageDurations: {
+    stage: string;
+    averageHours: number;
+  }[];
+  executorPerformance: {
+    executorId: number;
+    executorName: string;
+    casesClosed: number;
+    averageCycleDays: number | null;
+    openLoad: number;
+  }[];
 }

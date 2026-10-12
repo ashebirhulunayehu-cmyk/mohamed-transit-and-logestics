@@ -148,7 +148,7 @@ service.interceptors.response.use(
       return Promise.reject(getApiErrorMessage(data) || "The request failed.");
     }
 
-    const isSuccessfulStatus = [200, 201, 202, 204, 304].includes(response.status);
+    const isSuccessfulStatus = [200, 201, 202, 204].includes(response.status);
 
     if (isSuccessfulStatus || data?.statusCode === 200 || data?.statusCode === 201 || data?.statusCode === 204) {
       if (data?.response?.data !== undefined) {
@@ -175,19 +175,14 @@ service.interceptors.response.use(
     if (error.response) {
       const status = error.response.status;
       const data = error.response.data;
+      const apiErrorMessage = getApiErrorMessage(data);
 
       console.error("❌ API Error Path:", error.config?.url);
       console.error("❌ API Error Status:", status, data);
 
       if (status === 401) {
         redirectToLogin();
-        return Promise.reject("Unauthorized access");
-      }
-
-      const apiErrorMessage = getApiErrorMessage(data);
-
-      if (status === 304) {
-        return Promise.resolve((error.response?.data ?? {}) as ApiResponse);
+        return Promise.reject(apiErrorMessage || "Unauthorized access");
       }
 
       if (apiErrorMessage) {

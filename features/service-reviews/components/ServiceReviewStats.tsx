@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useServiceReviewStore } from "../serviceReview.store";
-import { FileText, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { FileText, AlertTriangle, CircleAlert } from "lucide-react";
 
 export function ServiceReviewStats() {
   const stats = useServiceReviewStore((state) => state.stats);
@@ -23,27 +23,26 @@ export function ServiceReviewStats() {
         <div>
           <p className="text-xs font-medium text-slate-500">Red channel</p>
           <p className="text-3xl font-bold text-slate-900 mt-2">{stats.redChannel}</p>
-          <p className="text-xs text-slate-400 mt-1">physical inspection</p>
         </div>
         <AlertTriangle className="w-5 h-5 text-slate-400" />
       </div>
 
-      {/* Submitted for review */}
+      {/* Documents available */}
       <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-sky-500 bg-white p-5 shadow-sm">
         <div>
-          <p className="text-xs font-medium text-slate-500">Submitted for review</p>
-          <p className="text-3xl font-bold text-slate-900 mt-2">{stats.submittedForReview}</p>
+          <p className="text-xs font-medium text-slate-500">Cases with documents</p>
+          <p className="text-3xl font-bold text-slate-900 mt-2">{stats.withDocuments}</p>
         </div>
         <FileText className="w-5 h-5 text-slate-400" />
       </div>
 
-      {/* Signed Off */}
-      <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-emerald-500 bg-white p-5 shadow-sm">
+      {/* Unverified documents */}
+      <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-rose-500 bg-white p-5 shadow-sm">
         <div>
-          <p className="text-xs font-medium text-slate-500">Signed off</p>
-          <p className="text-3xl font-bold text-slate-900 mt-2">{stats.signedOff}</p>
+          <p className="text-xs font-medium text-slate-500">Unverified documents</p>
+          <p className="text-3xl font-bold text-slate-900 mt-2">{stats.unverifiedDocuments}</p>
         </div>
-        <CheckCircle2 className="w-5 h-5 text-slate-400" />
+        <CircleAlert className="w-5 h-5 text-slate-400" />
       </div>
     </div>
   );

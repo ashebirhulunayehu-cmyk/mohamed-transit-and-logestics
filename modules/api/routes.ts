@@ -41,8 +41,10 @@ export const API_ROUTES = {
   assessor: {
     getPendingCustomerApprovals: "/Assessor/GetPendingCustomerApprovals",
     approveCustomer: "/Assessor/ApproveCustomer",
+    verifyCustomerDocument: "/Assessor/VerifyCustomerDocument",
     getPendingServices: "/Assessor/GetPendingServiceReviews",
     getPendingServiceReviews: "/Assessor/GetPendingServiceReviews",
+    getActiveServicesForRegister: "/Assessor/GetActiveServicesForRegister",
     reviewService: "/Assessor/ReviewService",
     getServicesUnderOversight: "/Assessor/GetServicesUnderOversight",
     addComplianceFeedback: "/Assessor/AddComplianceFeedback",
@@ -52,6 +54,7 @@ export const API_ROUTES = {
   },
   manager: {
     getDashboard: "/Manager/GetDashboard",
+    getReportsAnalytics: "/Manager/GetReportsAnalytics",
     assignExecutor: "/Manager/AssignExecutor",
     getServiceById: "/Manager/GetServiceById",
 
@@ -101,6 +104,7 @@ export const API_ROUTES = {
     sendBulk: "/Notification/SendBulkNotification",
   },
   message: {
+    getDirectoryUsers: "/Messaging/GetDirectoryUsers",
     getUserMessages: "/Messaging/GetUserMessages",
     getServiceMessages: "/Messaging/GetServiceMessages",
     getMessageById: "/Messaging/GetMessageById",

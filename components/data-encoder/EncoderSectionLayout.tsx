@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import EncoderRoleSwitcher from "@/components/data-encoder/EncoderRoleSwitcher";
 
-export type EncoderSection = "dashboard" | "customers" | "create-service" | "services" | "draft-services" | "documents" | "bulk-upload" | "templates" | "profile" | "messages" | "notifications";
+export type EncoderSection = "dashboard" | "create-customer" | "customers" | "create-service" | "services" | "draft-services" | "documents" | "bulk-upload" | "templates" | "profile" | "messages" | "notifications";
 
 interface EncoderSectionLayoutProps {
 	activeSection: EncoderSection;
@@ -42,14 +42,26 @@ const navigation: {
 		icon: LayoutDashboard,
 	},
 	{
+		id: "draft-services",
+		label: "Draft Services",
+		href: (base) => `${base}/draft-services`,
+		icon: FileText,
+	},
+	{
+		id: "create-customer",
+		label: "Create Customer",
+		href: (base) => `${base}/customers/new`,
+		icon: UsersRound,
+	},
+	{
 		id: "customers",
-		label: "Customers",
+		label: "Customer List",
 		href: (base) => `${base}/customers`,
 		icon: UsersRound,
 	},
 	{
 		id: "create-service",
-		label: "Create service",
+		label: "Create Service",
 		href: (base) => `${base}/services/new`,
 		icon: BriefcaseBusiness,
 	},
@@ -58,12 +70,6 @@ const navigation: {
 		label: "Services",
 		href: (base) => `${base}/services`,
 		icon: BriefcaseBusiness,
-	},
-	{
-		id: "draft-services",
-		label: "Draft services",
-		href: (base) => `${base}/draft-services`,
-		icon: FileText,
 	},
 	{
 		id: "documents",
@@ -84,12 +90,6 @@ const navigation: {
 		icon: FileDown,
 	},
 	{
-		id: "profile",
-		label: "Profile",
-		href: (base) => `${base}/profile`,
-		icon: UserCircle,
-	},
-	{
 		id: "messages",
 		label: "Messages",
 		href: (base) => `${base}/messages`,
@@ -100,6 +100,12 @@ const navigation: {
 		label: "Notifications",
 		href: (base) => `${base}/notifications`,
 		icon: Bell,
+	},
+	{
+		id: "profile",
+		label: "Profile",
+		href: (base) => `${base}/profile`,
+		icon: UserCircle,
 	},
 ];
 
@@ -159,7 +165,7 @@ export default function EncoderSectionLayout({
 						Overview
 					</p>
 					<div className="space-y-1">
-						{navigation.slice(0, 1).map(({ id, label, href, icon: Icon }) => (
+						{navigation.slice(0, 2).map(({ id, label, href, icon: Icon }) => (
 							<Link
 								key={id}
 								href={href(base)}
@@ -178,10 +184,10 @@ export default function EncoderSectionLayout({
 						))}
 					</div>
 					<p className={`mb-2 mt-7 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 ${collapsed ? "sr-only" : ""}`}>
-						Capture operations
+						Data Entry
 					</p>
 					<div className="space-y-1">
-						{navigation.slice(1, 5).map(({ id, label, href, icon: Icon }) => (
+						{navigation.slice(2, 6).map(({ id, label, href, icon: Icon }) => (
 							<Link
 								key={id}
 								href={href(base)}
@@ -203,7 +209,7 @@ export default function EncoderSectionLayout({
 						Documents
 					</p>
 					<div className="space-y-1">
-						{navigation.slice(5, 8).map(({ id, label, href, icon: Icon }) => (
+						{navigation.slice(6, 9).map(({ id, label, href, icon: Icon }) => (
 							<Link
 								key={id}
 								href={href(base)}
@@ -222,10 +228,10 @@ export default function EncoderSectionLayout({
 						))}
 					</div>
 					<p className={`mb-2 mt-7 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 ${collapsed ? "sr-only" : ""}`}>
-						Account
+						Communication
 					</p>
 					<div className="space-y-1">
-						{navigation.slice(8).map(({ id, label, href, icon: Icon }) => (
+						{navigation.slice(9, 11).map(({ id, label, href, icon: Icon }) => (
 							<Link
 								key={id}
 								href={href(base)}
@@ -239,6 +245,28 @@ export default function EncoderSectionLayout({
 								}`}
 							>
 									<Icon className={`h-[19px] w-[19px] shrink-0 ${activeSection === id ? "text-white" : "text-slate-500 group-hover:text-slate-700"}`} strokeWidth={1.9} />
+								{!collapsed && <span className="truncate">{label}</span>}
+							</Link>
+						))}
+					</div>
+					<p className={`mb-2 mt-7 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 ${collapsed ? "sr-only" : ""}`}>
+						Account
+					</p>
+					<div className="space-y-1">
+						{navigation.slice(11).map(({ id, label, href, icon: Icon }) => (
+							<Link
+								key={id}
+								href={href(base)}
+								aria-current={activeSection === id ? "page" : undefined}
+								title={collapsed ? label : undefined}
+								onClick={() => setMobileOpen(false)}
+								className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
+									activeSection === id
+										? "bg-blue-600 text-white shadow-sm"
+										: "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+								}`}
+							>
+								<Icon className={`h-[19px] w-[19px] shrink-0 ${activeSection === id ? "text-white" : "text-slate-500 group-hover:text-slate-700"}`} strokeWidth={1.9} />
 								{!collapsed && <span className="truncate">{label}</span>}
 							</Link>
 						))}

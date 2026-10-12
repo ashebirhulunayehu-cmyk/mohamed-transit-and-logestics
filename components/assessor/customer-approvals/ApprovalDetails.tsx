@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ApprovalApplicant } from "@/data/assessorMockData";
+import type { ApprovalApplicant } from "@/modules/assessor/assessor.type";
 import {
   Mail,
   Phone,
@@ -9,24 +9,27 @@ import {
   CheckCircle2,
   RotateCcw,
   XCircle,
-  AlertCircle,
-  Clock,
+  FileText,
 } from "lucide-react";
 
 interface ApprovalDetailsProps {
   applicant: ApprovalApplicant;
   onApprove?: (id?: string, note?: string) => void;
-  onReturn?: (id?: string, note?: string) => void;
   onRevision?: (id?: string, note?: string) => void;
   onReject?: (id?: string, note?: string) => void;
+  onVerifyDocument?: (documentId: string, isVerified: boolean, note: string) => void;
+  actionLoading?: boolean;
+  documentActionId?: string | null;
 }
 
 export function ApprovalDetails({
   applicant,
   onApprove,
-  onReturn,
   onRevision,
   onReject,
+  onVerifyDocument,
+  actionLoading = false,
+  documentActionId = null,
 }: ApprovalDetailsProps) {
   const [note, setNote] = useState("");
 
@@ -44,6 +47,20 @@ export function ApprovalDetails({
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-100 text-amber-800">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
             Flagged
+          </span>
+        );
+      case "Expired":
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-800">
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-600"></span>
+            Expired
+          </span>
+        );
+      case "Returned for revision":
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-600"></span>
+            Returned for revision
           </span>
         );
       default:
@@ -64,7 +81,7 @@ export function ApprovalDetails({
           <div>
             <h2 className="text-xl font-semibold text-slate-900">{applicant.name}</h2>
             <p className="text-sm text-slate-500 mt-0.5">
-              {applicant.importerType} · licence {applicant.licence}
+              {applicant.importerType}
             </p>
           </div>
           <div>{getStatusBadge(applicant.status)}</div>
@@ -101,7 +118,20 @@ export function ApprovalDetails({
             </span>
           </div>
           <div>
-            <span className="text-slate-500 block text-xs font-medium">Registered address</span>
+            <span className="text-slate-500 block text-xs font-medium">Business license</span>
+            <span className="text-slate-800">{applicant.licence}</span>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-xs font-medium">Import license</span>
+            <span className="text-slate-800">{applicant.importLicense}</span>
+            {applicant.importLicenseExpiry && (
+              <span className="mt-1 block text-xs text-slate-500">
+                Expires {new Date(applicant.importLicenseExpiry).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <div>
+            <span className="text-slate-500 block text-xs font-medium">Business address</span>
             <span className="text-slate-800 flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-slate-400" />
               {applicant.address}
@@ -116,31 +146,81 @@ export function ApprovalDetails({
             <span className="text-slate-500 block text-xs font-medium">Active services</span>
             <span className="text-slate-800">{applicant.activeServices}</span>
           </div>
+          {applicant.verificationNotes && (
+            <p className="col-span-2 mt-4 rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-amber-900">
+              Previous review note: {applicant.verificationNotes}
+            </p>
+          )}
         </div>
       </div>
 
       {/* KYC Document Checklist Card */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
         <div className="mb-4">
-          <h3 className="text-base font-semibold text-slate-900">KYC document checklist</h3>
-          <p className="text-xs text-slate-500">All items must be verified before approval</p>
+          <h3 className="text-base font-semibold text-slate-900">Customer documents</h3>
+          <p className="text-xs text-slate-500">
+            Approval is blocked while an active document is unverified or expired.
+          </p>
         </div>
 
-        <div className="divide-y divide-slate-100 border border-slate-100 rounded-lg overflow-hidden">
-          {applicant.checklist?.map((item) => (
-            <div key={item.id} className="flex items-center justify-between p-3.5 bg-white hover:bg-slate-50 transition-colors">
-              <span className="text-sm font-medium text-slate-700">{item.name}</span>
-              <div>{getStatusBadge(item.status)}</div>
-            </div>
-          ))}
-        </div>
+        {applicant.checklist.length === 0 ? (
+          <p className="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">
+            No active customer documents were returned by the backend.
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-100">
+            {applicant.checklist.map((item) => (
+              <div key={item.id} className="space-y-3 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                      <FileText aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
+                      <span className="break-all">{item.name}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {item.documentType}
+                      {item.isRequired ? " · Required by record" : " · Not marked required"}
+                    </p>
+                  </div>
+                  <div>{getStatusBadge(item.status)}</div>
+                </div>
+                <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                  <p>Submitted: {item.submittedAt ? new Date(item.submittedAt).toLocaleString() : "Not recorded"}</p>
+                  <p>Expiry: {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : "Not recorded"}</p>
+                </div>
+                {item.verificationNotes && (
+                  <p className="rounded bg-slate-50 p-2 text-xs text-slate-600">
+                    Verification note: {item.verificationNotes}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-slate-400">File download is not available for customer documents in the current API.</span>
+                  {onVerifyDocument && !item.isExpired && (
+                    <button
+                      type="button"
+                      onClick={() => onVerifyDocument(item.id, !item.isVerified, note)}
+                      disabled={actionLoading || documentActionId === item.id}
+                      className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
+                    >
+                      {documentActionId === item.id
+                        ? "Saving…"
+                        : item.isVerified
+                          ? "Mark unverified"
+                          : "Mark verified"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Assessment Decision Card */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
         <div className="mb-4">
           <h3 className="text-base font-semibold text-slate-900">Assessment decision</h3>
-          <p className="text-xs text-slate-500">Recorded against the customer audit trail</p>
+          <p className="text-xs text-slate-500">Decision notes are stored by the customer review API.</p>
         </div>
 
         <textarea
@@ -154,6 +234,7 @@ export function ApprovalDetails({
           <button
             type="button"
             onClick={() => onApprove?.(applicant.id, note)}
+            disabled={actionLoading}
             className="flex items-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-sm font-medium transition-colors"
           >
             <CheckCircle2 className="w-4 h-4" />
@@ -161,8 +242,10 @@ export function ApprovalDetails({
           </button>
           <button
             type="button"
-            onClick={() => onRevision?.(applicant.id, note) ?? onReturn?.(applicant.id, note)}
+            onClick={() => onRevision?.(applicant.id, note)}
+            disabled={actionLoading || !note.trim()}
             className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors"
+            title={!note.trim() ? "A revision note is required" : undefined}
           >
             <RotateCcw className="w-4 h-4" />
             Return for revision
@@ -170,10 +253,11 @@ export function ApprovalDetails({
           <button
             type="button"
             onClick={() => onReject?.(applicant.id, note)}
+            disabled={actionLoading}
             className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors"
           >
             <XCircle className="w-4 h-4" />
-            Reject
+            Reject customer
           </button>
         </div>
       </div>

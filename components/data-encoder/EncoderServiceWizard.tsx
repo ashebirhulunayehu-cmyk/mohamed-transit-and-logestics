@@ -28,7 +28,6 @@ import {
 	readCreatedServiceIdFromLocation,
 	readJsonResponse,
 } from "@/modules/dataencoder/data-encoder.response";
-import { DataEncoderEndpoints } from "@/modules/dataencoder/data-encoder.endpoint";
 
 type CustomerOption = {
 	id: string;
@@ -56,12 +55,10 @@ type DocumentUpload = {
 
 type CreatedService = {
 	serviceId: string;
-	serviceTypeUpdated: boolean;
 	documentsUploaded: boolean;
 };
 
 const steps = ["Importer", "Service type", "Consignment", "Documents", "Review & submit"];
-const SERVICE_TYPE_VALUES = { Multimodal: 0, Unimodal: 1 } as const;
 const MAX_DOCUMENT_SIZE = 25 * 1024 * 1024;
 const ALLOWED_DOCUMENT_TYPES = new Set([
 	"application/pdf",
@@ -345,25 +342,18 @@ export default function EncoderServiceWizard() {
 		try {
 			let currentService = createdService;
 			if (!currentService) {
-				const serviceNotes = [
-					`Importer: ${selectedCustomer?.businessName ?? ""} (TIN: ${selectedCustomer?.tinNumber ?? ""})`,
-					`Service type: ${form.serviceType}`,
-					`Goods description: ${form.itemDescription.trim()}`,
-					`Route category: ${form.routeCategory.trim()}`,
-					`Country of origin: ${form.countryOfOrigin.trim()}`,
-					`Declared value: ${form.declaredValue}`,
-					`Tax category: ${form.taxCategory.trim() || "General"}`,
-					notes.trim() ? `Additional notes: ${notes.trim()}` : "",
-				].filter(Boolean).join("\n");
 				const response = await fetch("/api/encoder/services", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
-						reference: "",
-						contactPerson: selectedCustomer?.contactPerson ?? "",
-						email: selectedCustomer?.contactEmail ?? "",
-						phone: selectedCustomer?.contactPhone ?? "",
-						notes: serviceNotes,
+						customerId: Number(form.customerId),
+						itemDescription: form.itemDescription.trim(),
+						routeCategory: form.routeCategory.trim(),
+						declaredValue: Number(form.declaredValue),
+						taxCategory: form.taxCategory.trim() || "General",
+						countryOfOrigin: form.countryOfOrigin.trim(),
+						serviceType: form.serviceType,
+						notes: notes.trim(),
 					}),
 				});
 				const body = await readApiResponse(response, "Service creation failed");
@@ -375,17 +365,8 @@ export default function EncoderServiceWizard() {
 				}
 				currentService = {
 					serviceId,
-					serviceTypeUpdated: false,
 					documentsUploaded: false,
 				};
-				setCreatedService(currentService);
-			}
-
-			if (!currentService.serviceTypeUpdated) {
-				await DataEncoderEndpoints.updateServiceType(currentService.serviceId, {
-					serviceType: SERVICE_TYPE_VALUES[form.serviceType as keyof typeof SERVICE_TYPE_VALUES],
-				});
-				currentService = { ...currentService, serviceTypeUpdated: true };
 				setCreatedService(currentService);
 			}
 
@@ -712,7 +693,7 @@ export default function EncoderServiceWizard() {
 									))}
 								</dl>
 								<p className="rounded-md border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-900">
-									Importer and consignment details, along with your notes, are included in the service notes sent to the Data Encoder API.
+									Importer and consignment details are sent with the service; your notes are included in the submission.
 								</p>
 								{!notice?.startsWith("Service submitted") && (
 									<button type="button" onClick={() => void submitService()} disabled={busy || !customers.length} className="inline-flex items-center gap-2 rounded-md bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60">

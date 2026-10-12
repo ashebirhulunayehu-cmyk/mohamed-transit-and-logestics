@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:api": "dotnet run --project backend\\src\\MohamedTransit.API\\MohamedTransit.API.csproj --launch-profile http",
+    "dev:all": "concurrently -k -n API,WEB -c cyan,magenta \"npm:dev:api\" \"npm:dev\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -26,6 +28,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.6",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",

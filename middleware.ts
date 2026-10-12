@@ -31,9 +31,16 @@ export function middleware(req: NextRequest) {
     pathname === "/encoder" ||
     pathname.startsWith("/encoder/");
 
+  const isAdminRoute =
+    pathname === `/${locale}/admin` ||
+    pathname.startsWith(`/${locale}/admin/`) ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/");
+
   const isProtectedPage =
     isCustomerRoute ||
     isEncoderRoute ||
+    isAdminRoute ||
     pathname.includes("/request-service");
 
   if (isProtectedPage && !token) {

@@ -433,10 +433,11 @@ export const useMessageStore = create<MessageState>((set, get) => ({
 
     set({ sending: true, error: null });
     const result = await useMessagingStore.getState().sendMessage({
-      serviceId,
-      recipientUserId: recipient,
+      shipmentId: serviceId,
+      recipientId: recipient,
       content: text.trim(),
       subject: text.trim(),
+      type: conversation.type === 'Groups' ? 1 : 2,
     });
     if (!result) {
       set({

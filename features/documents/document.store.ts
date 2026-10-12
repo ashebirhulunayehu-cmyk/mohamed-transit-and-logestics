@@ -16,19 +16,32 @@ import {
 const normalizeDocumentRecord = (value: unknown): DocumentRecord | null => {
   if (!isRecord(value)) return null;
 
-  const id = String(value.id ?? value.documentId ?? value.documentID ?? value.fileId ?? "");
+  const readField = (...names: string[]): unknown => {
+    const nameSet = new Set(names.map((name) => name.toLowerCase()));
+    const key = Object.keys(value).find((candidate) => nameSet.has(candidate.toLowerCase()));
+    return key ? value[key] : undefined;
+  };
+  const id = String(readField("id", "documentId", "fileId") ?? "");
   if (!id) return null;
 
-  const fileName = value.name ?? value.fileName ?? value.documentName ?? value.title ?? "Untitled document";
-  const type = value.type ?? value.documentType ?? value.category ?? "Document";
-  const serviceId = value.serviceId ?? value.serviceID ?? value.serviceNumber ?? "N/A";
-  const serviceStage = value.serviceStage ?? value.stageName ?? value.stage ?? "General";
-  const uploadedBy = value.uploadedBy ?? value.createdBy ?? value.uploadedByUser ?? value.userName ?? "System";
-  const uploadedAt = value.uploadedAt ?? value.createdAt ?? value.uploadDate ?? value.dateUploaded ?? "Recently";
-  const statusValue = String(value.status ?? value.verificationStatus ?? value.state ?? "").trim().toLowerCase();
-  const status = value.isVerified === true || ["verified", "approved"].includes(statusValue)
+  const fileName = readField("originalFileName", "fileName", "name", "documentName", "title") ?? "Untitled document";
+  const rawType = readField("type", "documentType", "category");
+  const documentTypes = ["", "Invoice", "Bank receipt", "Delivery order", "Inspection report", "Clearance document", "Transport license", "Arrival photo", "Store receipt", "Legal document", "Other"];
+  const numericType = Number(rawType);
+  const type = typeof rawType === "number" || (typeof rawType === "string" && /^\d+$/.test(rawType))
+    ? documentTypes[numericType] || "Document"
+    : rawType ?? "Document";
+  const serviceId = readField("serviceId", "shipmentId", "serviceNumber") ?? "N/A";
+  const serviceStage = readField("serviceStage", "shipmentStageId", "stageName", "stage") ?? "General";
+  const uploader = readField("uploadedByUser", "uploadedBy", "createdBy", "userName");
+  const uploadedBy = isRecord(uploader)
+    ? uploader.firstName ?? uploader.username ?? uploader.email ?? "Uploader"
+    : uploader ?? (readField("uploadedByUserId") ? `User ${String(readField("uploadedByUserId"))}` : "Unavailable");
+  const uploadedAt = readField("uploadedAt", "createdAt", "createAt", "uploadDate", "dateUploaded") ?? "Date unavailable";
+  const statusValue = String(readField("status", "verificationStatus", "state") ?? "").trim().toLowerCase();
+  const status = readField("isVerified") === true || ["verified", "approved"].includes(statusValue)
     ? "Verified"
-    : value.isFlagged === true || ["flagged", "needs review"].includes(statusValue)
+    : readField("isFlagged") === true || ["flagged", "needs review"].includes(statusValue)
       ? "Flagged"
       : ["rejected", "declined"].includes(statusValue)
         ? "Rejected"
@@ -88,6 +101,16 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   if (typeof error === "string" && error.trim()) return error;
   if (isRecord(error) && typeof error.message === "string") return error.message;
   return fallback;
+};
+
+const refreshCurrentDocuments = async (get: () => DocumentStore, additionalServiceIds: string[] = []) => {
+  const serviceIds = new Set([
+    ...get().documents.flatMap((document) =>
+      document.serviceId !== "N/A" && document.serviceId.trim() ? [document.serviceId] : [],
+    ),
+    ...additionalServiceIds,
+  ]);
+  await get().fetchDocumentsForServices([...serviceIds]);
 };
 
 const readDocumentRows = (response: unknown): unknown[] => {
@@ -164,8 +187,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   uploadDocument: async (payload) => {
     set({ loading: true, error: null });
     try {
+      const uploadedServiceId = payload.get("ServiceId");
       await uploadServiceDocument(payload);
-      await get().fetchDocuments();
+      await refreshCurrentDocuments(
+        get,
+        uploadedServiceId === null || uploadedServiceId === undefined ? [] : [String(uploadedServiceId)],
+      );
     } catch (err: unknown) {
       set({
         error: getErrorMessage(err, "Upload failed"),
@@ -187,7 +214,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         verificationNotes: payload.verificationNotes ?? payload.notes ?? "Verified by user",
         verifiedByUserId: payload.verifiedByUserId,
       });
-      await get().fetchDocuments();
+      await refreshCurrentDocuments(get);
     } catch (err: unknown) {
       set({
         error: getErrorMessage(err, "Verification failed"),
@@ -201,7 +228,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ loading: true, error: null });
     try {
       await deleteDocument(id);
-      await get().fetchDocuments();
+      await refreshCurrentDocuments(get);
     } catch (err: unknown) {
       set({
         error: getErrorMessage(err, "Delete failed"),
@@ -215,7 +242,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ loading: true, error: null });
     try {
       await deleteStageTransportDocument(id);
-      await get().fetchDocuments();
+      await refreshCurrentDocuments(get);
     } catch (err: unknown) {
       set({
         error: getErrorMessage(err, "Stage transport document delete failed"),

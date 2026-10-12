@@ -1,6 +1,6 @@
 'use client';
-import React, { useState, type FormEvent } from 'react';
-import { ArrowLeft, Info, Paperclip, Send, X } from 'lucide-react';
+import React, { useEffect, useState, type FormEvent } from 'react';
+import { ArrowLeft, Info, Paperclip, Plus, Send, X } from 'lucide-react';
 import { useMessageStore } from '../message.store';
 import { useAuthStore } from '@/modules/auth/auth.store';
 import { useMessagingStore } from '@/modules/message/message.store';
@@ -19,9 +19,14 @@ export const ChatWindow = () => {
     sending,
     error,
     clearError,
+    setActiveConversation,
   } = useMessageStore();
   const selectedMessage = useMessagingStore((state) => state.selectedMessage);
   const fetchMessageById = useMessagingStore((state) => state.fetchMessageById);
+  const directoryUsers = useMessagingStore((state) => state.directoryUsers);
+  const directoryLoading = useMessagingStore((state) => state.directoryLoading);
+  const directoryError = useMessagingStore((state) => state.directoryError);
+  const fetchDirectoryUsers = useMessagingStore((state) => state.fetchDirectoryUsers);
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [inputText, setInputText] = useState("");
   const [messageIdQuery, setMessageIdQuery] = useState("");
@@ -34,11 +39,17 @@ export const ChatWindow = () => {
   const [composeError, setComposeError] = useState<string | null>(null);
   const [composeStatus, setComposeStatus] = useState<string | null>(null);
   const [composeSending, setComposeSending] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const activeChat = conversations.find((conversation) => conversation.id === activeConversationId);
+  const showComposer = !activeChat || composeOpen;
   const detailMessage = selectedMessage && String(selectedMessage.id) === detailsMessageId
     ? selectedMessage
     : null;
+
+  useEffect(() => {
+    if (showComposer) void fetchDirectoryUsers();
+  }, [fetchDirectoryUsers, showComposer]);
 
   const handleSend = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -73,7 +84,7 @@ export const ChatWindow = () => {
     setComposeSending(true);
     const result = await useMessagingStore.getState().sendMessage({
       serviceId,
-      recipientUserId: receiverId,
+      recipientId: receiverId,
       content: inputText.trim(),
       subject: composeSubject.trim(),
     });
@@ -88,6 +99,15 @@ export const ChatWindow = () => {
     setInputText("");
     setComposeSubject("");
     await useMessageStore.getState().fetchConversations();
+    const sentConversation = useMessageStore.getState().conversations.find(
+      (conversation) =>
+        String(conversation.serviceId) === String(serviceId) &&
+        String(conversation.recipientUserId) === String(receiverId),
+    );
+    if (sentConversation) {
+      setComposeOpen(false);
+      await setActiveConversation(sentConversation.id);
+    }
   };
 
   const openMessageDetails = async (messageId: string) => {
@@ -127,18 +147,36 @@ export const ChatWindow = () => {
             Conversations
           </button>
           <h2 className="text-sm font-bold text-slate-900">
-            {activeChat?.title ?? "Select a conversation"}
+            {showComposer ? "New message" : activeChat?.title ?? "Select a conversation"}
           </h2>
           <p className="text-xs text-slate-500">
-            {activeChat ? `${activeChat.participants.length} participants · Active thread` : "Choose a conversation to view messages."}
+            {showComposer
+              ? "Choose an active user from any role and send a service-linked message."
+              : activeChat ? `${activeChat.participants.length} participants · Active thread` : "Choose a conversation to view messages."}
           </p>
         </div>
-        <div className="flex space-x-1">
-          {activeChat?.participants.map((p, idx) => (
-            <span key={idx} className="w-7 h-7 bg-slate-200 text-slate-700 text-xs font-semibold rounded-full flex items-center justify-center">
-              {p}
-            </span>
-          ))}
+        <div className="flex items-center gap-2">
+          {activeChat && (
+            <button
+              type="button"
+              onClick={() => {
+                setComposeError(null);
+                setComposeStatus(null);
+                setComposeOpen((open) => !open);
+              }}
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            >
+              {showComposer ? <ArrowLeft className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {showComposer ? "Back to chat" : "New message"}
+            </button>
+          )}
+          {!showComposer && <div className="hidden space-x-1 sm:flex">
+            {activeChat?.participants.map((p, idx) => (
+              <span key={idx} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
+                {p}
+              </span>
+            ))}
+          </div>}
         </div>
       </div>
 
@@ -146,40 +184,61 @@ export const ChatWindow = () => {
       <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/30 p-6">
         {loading ? (
           <p className="py-8 text-center text-xs text-slate-500">Loading messages...</p>
-        ) : !activeChat ? (
+        ) : showComposer ? (
           <div className="mx-auto flex w-full max-w-xl flex-col gap-6 py-4">
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">New message</h3>
-              <p className="mt-1 text-xs text-slate-500">Enter a service and recipient to start a conversation.</p>
-              <form onSubmit={(event) => void handleNewMessage(event)} className="mt-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700"><Plus className="h-5 w-5" /></span>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Start a conversation</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">Select an active user from any role. Your message is linked to a service and delivered to the recipient’s user ID.</p>
+                </div>
+              </div>
+              <form onSubmit={(event) => void handleNewMessage(event)} className="mt-5 space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block text-xs font-medium text-slate-700">Service ID
-                    <input type="number" min="1" step="1" required value={composeServiceId} onChange={(event) => setComposeServiceId(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
+                  <label className="block text-xs font-semibold text-slate-700">Service ID
+                    <input type="number" min="1" step="1" required value={composeServiceId} onChange={(event) => setComposeServiceId(event.target.value)} placeholder="Enter the service ID" className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
                   </label>
-                  <label className="block text-xs font-medium text-slate-700">Recipient ID
-                    <input type="number" min="1" step="1" required value={composeRecipientId} onChange={(event) => setComposeRecipientId(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
+                  <label className="block text-xs font-semibold text-slate-700">Recipient · role · user ID
+                    <select required value={composeRecipientId} onChange={(event) => { setComposeRecipientId(event.target.value); setComposeError(null); }} disabled={directoryLoading || directoryUsers.length === 0} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50">
+                      <option value="">{directoryLoading ? "Loading active users…" : "Choose a recipient"}</option>
+                      {directoryUsers.map((user) => (
+                        <option key={user.id} value={String(user.id)}>
+                          {user.displayName} · {user.roleNames.join(", ") || "No role"} · ID {user.id}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
-                <label className="block text-xs font-medium text-slate-700">Subject
-                  <input required value={composeSubject} onChange={(event) => { setComposeSubject(event.target.value); setComposeError(null); }} placeholder="Message subject" className="mt-1.5 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">The sender ID comes from your signed-in account. A service ID is required to attach the conversation to its case.</p>
+                {directoryError && (
+                  <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                    <span>{directoryError}</span>
+                    <button type="button" onClick={() => void fetchDirectoryUsers()} className="shrink-0 font-semibold underline underline-offset-2">Try again</button>
+                  </div>
+                )}
+                {!directoryLoading && !directoryError && directoryUsers.length === 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">No active users are available to message.</p>}
+                <label className="block text-xs font-semibold text-slate-700">Subject
+                  <input required maxLength={200} value={composeSubject} onChange={(event) => { setComposeSubject(event.target.value); setComposeError(null); }} placeholder="Message subject" className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
                 </label>
-                <label className="block text-xs font-medium text-slate-700">Message
-                  <textarea required rows={3} value={inputText} onChange={(event) => { setInputText(event.target.value); setComposeError(null); }} placeholder="Write a message..." className="mt-1.5 w-full resize-y rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
+                <label className="block text-xs font-semibold text-slate-700">Message
+                  <textarea required rows={4} value={inputText} onChange={(event) => { setInputText(event.target.value); setComposeError(null); }} placeholder="Write a message..." className="mt-1.5 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
                 </label>
                 {composeError && <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">{composeError}</p>}
                 {composeStatus && <p role="status" className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{composeStatus}</p>}
-                <div className="flex justify-end">
-                  <button type="submit" disabled={composeSending || !inputText.trim()} className="inline-flex h-9 items-center gap-2 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
-                    <Send className="h-4 w-4" />{composeSending ? "Sending..." : "Send"}
+                <div className="flex justify-end gap-2">
+                  {activeChat && <button type="button" onClick={() => setComposeOpen(false)} disabled={composeSending} className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>}
+                  <button type="submit" disabled={composeSending || !inputText.trim() || !composeRecipientId || directoryLoading} className="inline-flex h-10 items-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
+                    <Send className="h-4 w-4" />{composeSending ? "Sending…" : "Send message"}
                   </button>
                 </div>
               </form>
             </section>
-            <form onSubmit={(event) => void handleMessageLookup(event)} className="flex w-full gap-2">
+            {!activeChat && <form onSubmit={(event) => void handleMessageLookup(event)} className="flex w-full gap-2">
               <label className="sr-only" htmlFor="message-id-lookup">Message ID</label>
               <input id="message-id-lookup" inputMode="numeric" value={messageIdQuery} onChange={(event) => setMessageIdQuery(event.target.value)} placeholder="Look up message by ID" className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
               <button type="submit" disabled={!messageIdQuery.trim() || detailsLoading} className="h-10 rounded-md bg-blue-700 px-3 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50">{detailsLoading ? "Loading" : "Find message"}</button>
-            </form>
+            </form>}
           </div>
         ) : activeChat.messages.length === 0 ? (
           <p className="py-8 text-center text-xs text-slate-500">No messages in this conversation yet.</p>
@@ -214,12 +273,12 @@ export const ChatWindow = () => {
       </div>
 
       {/* Message Input Footer */}
-      {activeChat && error && (
+      {!showComposer && activeChat && error && (
         <p role="alert" className="border-t border-rose-100 bg-rose-50 px-4 py-2 text-xs text-rose-800">
           {error}
         </p>
       )}
-      {activeChat && <form onSubmit={(event) => void handleSend(event)} className="p-4 border-t border-slate-200 bg-white flex items-center space-x-3">
+      {!showComposer && activeChat && <form onSubmit={(event) => void handleSend(event)} className="p-4 border-t border-slate-200 bg-white flex items-center space-x-3">
         <button type="button" disabled className="text-slate-400" aria-label="Attachments are not available">
           <Paperclip className="h-4 w-4" />
         </button>

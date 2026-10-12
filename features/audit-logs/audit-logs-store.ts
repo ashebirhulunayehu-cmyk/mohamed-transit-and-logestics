@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AssessorEndpoints } from '@/modules/assessor/assessor.endpoint.ts';
+import { AssessorEndpoints } from '@/modules/assessor/assessor.endpoint';
 
 export type LogType = string;
 

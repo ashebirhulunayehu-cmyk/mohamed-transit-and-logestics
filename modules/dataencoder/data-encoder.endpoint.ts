@@ -129,7 +129,11 @@ export const DataEncoderEndpoints = {
     id: number | string,
     payload: Record<string, unknown>
   ) =>
-    service.put(API_ROUTES.dataEncoder.updateServiceType(id), payload),
+    fetch(`/api/encoder/services/${encodeURIComponent(String(id))}/service-type`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
 
   // GET /api/v1/DataEncoder/services via the authenticated same-origin proxy.
   getServices: () => getProxyJson("/api/encoder/services", "Data Encoder services"),

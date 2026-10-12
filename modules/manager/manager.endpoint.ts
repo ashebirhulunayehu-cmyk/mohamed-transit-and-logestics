@@ -8,6 +8,7 @@ import type {
 
 export const ManagerEndpoints = {
   getDashboard: () => service.get(API_ROUTES.manager.getDashboard),
+  getReportsAnalytics: () => service.get(API_ROUTES.manager.getReportsAnalytics),
   assignExecutor: (payload: ManagerExecutorAssignmentRequest) =>
     service.put(API_ROUTES.manager.assignExecutor, payload),
   getServiceById: (id: string | number) =>

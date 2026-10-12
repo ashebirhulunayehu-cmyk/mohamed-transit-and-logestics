@@ -160,8 +160,8 @@ export default function CasesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {shipments.map((shipment) => (
-                  <tr key={String(shipment.id ?? shipment.trackingNumber ?? Math.random())} className="hover:bg-slate-50">
+                {shipments.map((shipment, index) => (
+                  <tr key={String(shipment.id ?? shipment.trackingNumber ?? `shipment-${index}`)} className="hover:bg-slate-50">
                     <td className="px-5 py-3 font-medium text-slate-900">{shipment.trackingNumber ?? `#${shipment.id}`}</td>
                     <td className="px-5 py-3">{shipment.description ?? "-"}</td>
                     <td className="px-5 py-3">{shipment.mode ?? "-"}</td>

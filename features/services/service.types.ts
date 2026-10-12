@@ -4,18 +4,39 @@ export type ServiceStatus =
   | "Requires customer action"
   | "Pending"
   | "Blocked"
-  | "Completed";
+  | "Completed"
+  | "Draft"
+  | "Submitted"
+  | "Under review"
+  | "Approved"
+  | "Rejected"
+  | "Cancelled"
+  | "Delivered"
+  | "Unknown";
 
 export type RiskChannel =
   | "Green channel"
   | "Yellow channel"
   | "Red channel"
-  | "Blue channel";
+  | "Blue channel"
+  | "Unassigned";
 
-export type TransportMode = "Unimodal" | "Multimodal";
+export type TransportMode = "Unimodal" | "Multimodal" | "Unknown";
+
+export type ServiceColumn =
+  | "service"
+  | "importer"
+  | "mode"
+  | "status"
+  | "risk"
+  | "caseExecutor"
+  | "eta"
+  | "sla"
+  | "updated";
 
 export interface ServiceRecord {
   id: string;
+  shipmentId?: string;
   title: string;
   importerName: string;
   importerCode: string;

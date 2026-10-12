@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 
 import { ApprovalStats } from "@/components/assessor/customer-approvals/ApprovalStats";
@@ -8,100 +9,181 @@ import { ApprovalFilters } from "@/components/assessor/customer-approvals/Approv
 import { ApprovalTable } from "@/components/assessor/customer-approvals/ApprovalTable";
 import { ApprovalDetails } from "@/components/assessor/customer-approvals/ApprovalDetails";
 import { useAssessorStore } from "@/modules/assessor/assessor.store";
-import type { CustomerApprovalResult } from "@/modules/assessor/assessor.type";
-
-import {
-  type ApprovalApplicant,
-  type ApprovalStatus,
-} from "@/data/assessorMockData";
+import { useAuthStore } from "@/modules/auth/auth.store";
+import type {
+  ApprovalApplicant,
+  ApprovalStatus,
+} from "@/modules/assessor/assessor.type";
 import type { AssessorItem } from "@/modules/assessor/assessor.type";
 
 interface PageProps {
   params?: Promise<{ lang: string }>;
 }
 
-const getApprovalStatus = (value: unknown, isVerified: unknown): ApprovalStatus => {
-  if (typeof value !== "string") {
-    return isVerified === true ? "Verified" : "Pending check";
-  }
-
-  const status = value.toLowerCase().trim();
-  if (["verified", "approved"].includes(status) || isVerified === true || isVerified === 1 || isVerified === "1") return "Verified";
-  if (status === "flagged") return "Flagged";
-  if (["rejected", "declined"].includes(status)) return "Rejected";
-  if (["returned for revision", "returned", "revision required"].includes(status)) {
-    return "Returned for revision";
-  }
-
-  return "Pending check";
-};
-
 const getText = (...values: unknown[]): string => {
   const value = values.find((candidate) => typeof candidate === "string" && candidate.trim());
   return typeof value === "string" ? value : "";
 };
 
+const documentTypeNames: Record<number, string> = {
+  1: "Invoice",
+  2: "Bank receipt",
+  3: "Delivery order",
+  4: "Inspection report",
+  5: "Clearance document",
+  6: "Transport license",
+  7: "Arrival photo",
+  8: "Store receipt",
+  9: "Legal document",
+  10: "Other",
+};
+
 const normalizeApplicant = (customer: AssessorItem): ApprovalApplicant => {
-  const checklist = Array.isArray(customer.checklist) ? customer.checklist : [];
+  const documents = Array.isArray(customer.documents)
+    ? customer.documents.filter(
+        (item): item is Record<string, unknown> =>
+          typeof item === "object" && item !== null,
+      )
+    : [];
+  const isReturnedForRevision = customer.isReturnedForRevision === true;
 
   return {
     id: String(customer.id ?? customer.customerId ?? ""),
     name: getText(customer.name, customer.businessName) || "Unknown customer",
-    importerType: getText(customer.importerType, customer.businessType) || "Importer",
-    licence: getText(customer.licence, customer.businessLicense) || "-",
-    tin: getText(customer.tin, customer.tinNumber) || "-",
-    status: getApprovalStatus(customer.status, customer.isVerified),
+    importerType: getText(customer.businessType) || "Importer",
+    licence: getText(customer.businessLicense) || "-",
+    importLicense: getText(customer.importLicense) || "-",
+    importLicenseExpiry: getText(customer.importLicenseExpiry) || null,
+    tin: getText(customer.tinNumber) || "-",
+    status: isReturnedForRevision ? "Returned for revision" : "Pending check",
+    verificationNotes: getText(customer.verificationNotes) || null,
     primaryContact: getText(customer.primaryContact, customer.contactPerson) || "-",
-    email: getText(customer.email, customer.contactEmail) || "-",
-    phone: getText(customer.phone, customer.contactPhone) || "-",
-    address: getText(customer.address, customer.businessAddress) || "-",
-    registeredDate: getText(customer.registeredDate, customer.createAt, customer.createdAt) || "-",
-    activeServices: Number.isFinite(Number(customer.activeServices)) ? Number(customer.activeServices) : 0,
-    checklist: checklist.map((item, index) => {
-      const entry = typeof item === "object" && item !== null ? item as Record<string, unknown> : {};
+    email: getText(customer.contactEmail) || "-",
+    phone: getText(customer.contactPhone) || "-",
+    address: getText(customer.businessAddress) || "-",
+    registeredDate: getText(customer.createAt) || "-",
+    activeServices: Number.isFinite(Number(customer.activeServices))
+      ? Number(customer.activeServices)
+      : null,
+    isReturnedForRevision,
+    checklist: documents.map((entry, index) => {
+      const expiryDate = getText(entry.expiryDate) || null;
+      const isExpired = Boolean(expiryDate && new Date(expiryDate).getTime() < Date.now());
+      const rawType = entry.documentType;
+      const typeCode = typeof rawType === "number" ? rawType : Number(rawType);
+      const documentType =
+        documentTypeNames[typeCode] ??
+        (typeof rawType === "string" ? rawType : "Document");
       return {
         id: String(entry.id ?? index),
-        name: getText(entry.name) || "Document",
-        status: getApprovalStatus(entry.status, entry.isVerified),
+        name: getText(entry.originalFileName) || documentType,
+        documentType,
+        status: isExpired
+          ? "Expired"
+          : entry.isVerified === true
+            ? "Verified"
+            : "Pending check",
+        isRequired: entry.isRequired === true,
+        isVerified: entry.isVerified === true,
+        expiryDate,
+        isExpired,
+        verificationNotes: getText(entry.verificationNotes) || null,
+        submittedAt: getText(entry.createAt) || null,
       };
     }),
   };
+};
+
+const normalizeRole = (value: unknown): string => {
+  if (!value) return "";
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const role = normalizeRole(item);
+      if (role) return role;
+    }
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value.trim().toLowerCase().replace(/[^a-z]/g, "");
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return normalizeRole(
+      record.role ??
+        record.roleName ??
+        record.userType ??
+        record.accountType ??
+        record.name ??
+        record.userRoles ??
+        record.roles,
+    );
+  }
+
+  return "";
 };
 
 export default function CustomerApprovalsPage({ params }: PageProps) {
   // Next.js params unwrap handling
   const resolvedParams = params ? use(params) : { lang: "en" };
   const currentLang = resolvedParams?.lang || "en";
+  const router = useRouter();
+
+  const authUser = useAuthStore((state) => state.user);
+  const userRole = normalizeRole(
+    authUser?.roleName ??
+      authUser?.roles ??
+      authUser?.userRoles ??
+      "",
+  );
 
   const pendingCustomers = useAssessorStore((state) => state.pendingCustomers);
   const pendingCustomersLoading = useAssessorStore((state) => state.pendingCustomersLoading);
   const pendingCustomersError = useAssessorStore((state) => state.pendingCustomersError);
   const fetchPendingCustomers = useAssessorStore((state) => state.fetchPendingCustomers);
   const approveCustomer = useAssessorStore((state) => state.approveCustomer);
+  const verifyCustomerDocument = useAssessorStore((state) => state.verifyCustomerDocument);
+  const actionLoading = useAssessorStore((state) => state.loading);
   const dashboardData = useAssessorStore((state) => state.dashboardData);
   const fetchDashboard = useAssessorStore((state) => state.fetchDashboard);
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
-  const [approvedCustomer, setApprovedCustomer] = useState<CustomerApprovalResult | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [documentActionId, setDocumentActionId] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"All" | ApprovalStatus>("All");
 
   useEffect(() => {
+    const hasAssessorAccess = ["assessor", "admin", "superadmin"].includes(userRole);
+
+    if (!hasAssessorAccess) {
+      const nextRoute = userRole === "manager" ? `/${currentLang}/admin/dashboard?role=manager` : `/${currentLang}/admin/dashboard?role=assessor`;
+      router.replace(nextRoute);
+      return;
+    }
+
     void fetchPendingCustomers();
     void fetchDashboard();
-  }, [fetchPendingCustomers, fetchDashboard]);
+  }, [fetchPendingCustomers, fetchDashboard, router, currentLang, userRole]);
 
   const applicants = useMemo<ApprovalApplicant[]>(() => {
     return pendingCustomers.map(normalizeApplicant);
   }, [pendingCustomers]);
 
   const stats = useMemo(() => {
-    const awaitingDecision = applicants.filter((applicant) => applicant.status === "Pending check").length;
-    const returnedForRevision = applicants.filter((applicant) => applicant.status === "Returned for revision").length;
-    const verifiedImporters = applicants.filter((applicant) => applicant.status === "Verified").length;
-    const medianDecisionTime = dashboardData?.recentCustomerApprovals?.length
-      ? "1.4 d"
-      : "N/A";
+    const awaitingDecision = applicants.filter(
+      (applicant) => applicant.status === "Pending check",
+    ).length;
+    const returnedForRevision = applicants.filter(
+      (applicant) => applicant.status === "Returned for revision",
+    ).length;
+    const verifiedImporters = dashboardData?.verifiedCustomers ?? 0;
+    const medianDecisionTime =
+      dashboardData?.medianCustomerDecisionDays == null
+        ? "N/A"
+        : `${dashboardData.medianCustomerDecisionDays.toFixed(1)} d`;
 
     return {
       awaitingDecision,
@@ -122,11 +204,8 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
       pending: applicants.filter((a) =>
         ["pending check", "pending", "in-review"].includes(a.status.toLowerCase())
       ).length,
-      flagged: applicants.filter((a) =>
-        ["flagged", "returned for revision"].includes(a.status.toLowerCase())
-      ).length,
-      approved: applicants.filter((a) =>
-        ["verified", "approved"].includes(a.status.toLowerCase())
+      returned: applicants.filter(
+        (a) => a.status === "Returned for revision",
       ).length,
     };
   }, [applicants]);
@@ -167,40 +246,97 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   // Decision Handlers
   // ------------------------------------------------------------
 
-  const handleApprove = async (id?: string, note?: string) => {
+  const submitCustomerDecision = async (
+    id: string | undefined,
+    note: string | undefined,
+    isApproved: boolean,
+    returnForRevision: boolean,
+  ) => {
     const customerId = Number(id || selectedApplicantId);
-    if (!Number.isInteger(customerId)) {
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      setApprovalError("The selected customer has an invalid ID.");
+      return;
+    }
+    if (returnForRevision && !note?.trim()) {
+      setApprovalError("A note is required when returning a customer for revision.");
       return;
     }
 
     setApprovalError(null);
+    setActionMessage(null);
+    if (returnForRevision && !note?.trim()) {
+      setApprovalError("A note is required when returning a customer for revision.");
+      return;
+    }
 
     try {
-      const result = await approveCustomer({
+      await approveCustomer({
         customerId,
-        isApproved: true,
+        isApproved,
         notes: note?.trim() || null,
+        returnForRevision,
       });
-      setApprovedCustomer(result);
+      setActionMessage(
+        returnForRevision
+          ? "Customer returned for revision."
+          : isApproved
+            ? "Customer approved."
+            : "Customer rejected.",
+      );
     } catch (error: unknown) {
       setApprovalError(
-        error instanceof Error ? error.message : typeof error === "string" ? error : "Customer approval failed."
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Customer review failed.",
       );
     }
   };
 
-  const handleReturn = (id?: string, note?: string) => {
-    console.log("Return for revision:", {
-      id: id || selectedApplicantId,
-      note,
-    });
-  };
+  const handleApprove = (id?: string, note?: string) =>
+    submitCustomerDecision(id, note, true, false);
 
-  const handleReject = (id?: string, note?: string) => {
-    console.log("Reject importer:", {
-      id: id || selectedApplicantId,
-      note,
-    });
+  const handleReturn = (id?: string, note?: string) =>
+    submitCustomerDecision(id, note, false, true);
+
+  const handleReject = (id?: string, note?: string) =>
+    submitCustomerDecision(id, note, false, false);
+
+  const handleVerifyDocument = async (
+    documentId: string,
+    isVerified: boolean,
+    note: string,
+  ) => {
+    const numericDocumentId = Number(documentId);
+    if (!Number.isInteger(numericDocumentId) || numericDocumentId <= 0) {
+      setApprovalError("The selected document has an invalid ID.");
+      return;
+    }
+
+    setApprovalError(null);
+    setActionMessage(null);
+    setDocumentActionId(documentId);
+    try {
+      await verifyCustomerDocument({
+        documentId: numericDocumentId,
+        isVerified,
+        notes: note.trim() || undefined,
+      });
+      setActionMessage(
+        isVerified ? "Customer document verified." : "Customer document marked unverified.",
+      );
+    } catch (error: unknown) {
+      setApprovalError(
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Customer document verification failed.",
+      );
+    } finally {
+      setDocumentActionId(null);
+    }
   };
 
   return (
@@ -255,16 +391,9 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
           </div>
         )}
 
-        {approvedCustomer && (
+        {actionMessage && (
           <div role="status" className="mb-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-            <p className="font-semibold">
-              {approvedCustomer.businessName || "Customer"} {approvedCustomer.isVerified ? "approved and verified" : "approval updated"}
-            </p>
-            {approvedCustomer.verifiedAt && (
-              <p className="mt-1 text-xs text-emerald-800">
-                Verified {new Date(approvedCustomer.verifiedAt).toLocaleString()}
-              </p>
-            )}
+            {actionMessage}
           </div>
         )}
 
@@ -324,9 +453,11 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
               <ApprovalDetails
                 applicant={activeApplicant}
                 onApprove={handleApprove}
-                onReturn={handleReturn}
                 onRevision={handleReturn}
                 onReject={handleReject}
+                onVerifyDocument={handleVerifyDocument}
+                actionLoading={actionLoading}
+                documentActionId={documentActionId}
               />
             ) : (
               <div className="flex min-h-[500px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white">

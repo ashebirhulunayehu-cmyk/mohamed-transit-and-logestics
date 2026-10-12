@@ -23,7 +23,7 @@ export interface ApprovalApplicant {
   phone: string;
   address: string;
   registeredDate: string;
-  activeServices: number;
+  activeServices: number | null;
   checklist: ChecklistItem[];
 }
 

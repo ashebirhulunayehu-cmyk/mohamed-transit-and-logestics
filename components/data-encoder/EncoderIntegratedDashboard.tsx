@@ -292,18 +292,14 @@ export default function EncoderIntegratedDashboard() {
               </div>
               <div className="divide-y divide-slate-200">
                 {dashboardData.recentServices.slice(0, 5).map((service, idx) => (
-                  <div key={idx} className="px-6 py-4 hover:bg-slate-50 transition">
+                  <div key={service.id ?? service.trackingNumber ?? idx} className="px-6 py-4 hover:bg-slate-50 transition">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <p className="font-semibold text-slate-900">
-                          {typeof service === 'object' && service !== null && 'itemDescription' in service
-                            ? (service as any).itemDescription
-                            : 'Service Record'}
+                          {service.itemDescription ?? service.description ?? 'Service Record'}
                         </p>
                         <p className="text-sm text-slate-500 mt-1">
-                          {typeof service === 'object' && service !== null && 'trackingNumber' in service
-                            ? `#${(service as any).trackingNumber}`
-                            : 'No tracking number'}
+                          {service.trackingNumber ? `#${service.trackingNumber}` : 'No tracking number'}
                         </p>
                       </div>
                       <span className="inline-flex items-center rounded-full px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold">

@@ -43,7 +43,36 @@ export const login = (payload: ILogin): Promise<LoginResponse> => {
     password: payload.password,
   };
 
-  return http.post({ url: authEndpoints.login, data: normalizedPayload });
+  return fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(normalizedPayload),
+    cache: "no-store",
+  }).then(async (response) => {
+    const text = await response.text();
+    let body: unknown = null;
+    if (text) {
+      try {
+        body = JSON.parse(text) as unknown;
+      } catch {
+        body = text;
+      }
+    }
+
+    if (!response.ok) {
+      if (typeof body === "string" && body.trim()) throw new Error(body);
+      if (typeof body === "object" && body !== null && !Array.isArray(body)) {
+        const record = body as Record<string, unknown>;
+        const message = [record.message, record.detail, record.error, record.title].find(
+          (value): value is string => typeof value === "string" && Boolean(value.trim()),
+        );
+        if (message) throw new Error(message);
+      }
+      throw new Error(`Login failed (${response.status}).`);
+    }
+
+    return body as LoginResponse;
+  });
 };
 
 export const loginUser = (payload: LoginUserRequest): Promise<LoginResponse> =>
@@ -67,4 +96,10 @@ export const resetPasswordFromEmail = (
   http.post({ url: authEndpoints.resetPasswordFromEmail, data: payload });
 
 export const changePassword = (payload: ChangePasswordRequest): Promise<AuthResponse> =>
-  http.post({ url: authEndpoints.changePassword, data: payload });
+  http.post({
+    url: authEndpoints.changePassword,
+    data: {
+      Password: payload.currentPassword,
+      NewPassword: payload.newPassword,
+    },
+  });

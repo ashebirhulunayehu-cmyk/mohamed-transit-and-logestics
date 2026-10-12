@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import { getMessageById, getServiceMessages as getServiceMessagesRequest, getUnreadCount as getUnreadCountRequest, getUnreadMessages, getUserMessages, markMessageAsRead as markMessageAsReadRequest, sendMessage as sendMessageRequest } from "./message.endpoint";
-import type { MessageImporterSummary, MessageServiceSummary, MessageUserSummary, SendMessageRequest, SendMessageResult, UserMessage } from "./message.type";
+import { useAuthStore } from "@/modules/auth/auth.store";
+import { getDirectoryUsers as getDirectoryUsersRequest, getMessageById, getServiceMessages as getServiceMessagesRequest, getUnreadCount as getUnreadCountRequest, getUnreadMessages, getUserMessages, markMessageAsRead as markMessageAsReadRequest, sendMessage as sendMessageRequest } from "./message.endpoint";
+import type { MessageDirectoryUser, MessageImporterSummary, MessageServiceSummary, MessageUserSummary, SendMessageRequest, SendMessageResult, UserMessage } from "./message.type";
 
 interface MessageState {
 	userMessages: UserMessage[];
@@ -8,8 +9,12 @@ interface MessageState {
 	unreadMessages: UserMessage[];
 	unreadCount: number;
 	selectedMessage: UserMessage | null;
+	directoryUsers: MessageDirectoryUser[];
+	directoryLoading: boolean;
+	directoryError: string | null;
 	loading: boolean;
 	error: string | null;
+	fetchDirectoryUsers: () => Promise<void>;
 	fetchUserMessages: () => Promise<UserMessage[]>;
 	fetchServiceMessages: (serviceId?: string | number) => Promise<UserMessage[]>;
 	fetchUnreadMessages: () => Promise<UserMessage[]>;
@@ -56,6 +61,48 @@ const unwrapMessageData = (value: unknown): unknown => {
 	if (value.resultData !== undefined) return unwrapMessageData(value.resultData);
 
 	return value;
+};
+
+const getDirectoryUserList = (value: unknown): unknown[] => {
+	const payload = unwrapMessageData(value);
+	if (Array.isArray(payload)) return payload;
+	if (!isRecord(payload)) return [];
+
+	for (const key of ["items", "users", "results", "result"]) {
+		if (Array.isArray(payload[key])) return payload[key];
+	}
+
+	return [];
+};
+
+const readRoleNames = (value: unknown): string[] => {
+	if (typeof value === "string") return value.trim() ? [value.trim()] : [];
+	if (Array.isArray(value)) return value.flatMap(readRoleNames);
+	if (!isRecord(value)) return [];
+
+	const directName = value.roleName ?? value.name;
+	if (typeof directName === "string" && directName.trim()) return [directName.trim()];
+	return readRoleNames(value.role ?? value.roles ?? value.userRoles);
+};
+
+const normalizeDirectoryUser = (value: unknown): MessageDirectoryUser | null => {
+	if (!isRecord(value)) return null;
+	const id = value.id ?? value.userId;
+	if ((typeof id !== "string" && typeof id !== "number") || String(id).trim() === "") return null;
+
+	const name = [value.firstName, value.lastName]
+		.filter((part): part is string => typeof part === "string" && Boolean(part.trim()))
+		.join(" ")
+		.trim();
+	const username = typeof value.username === "string" ? value.username.trim() : "";
+	const email = typeof value.email === "string" ? value.email.trim() : "";
+	const roleNames = [...new Set(readRoleNames(value.roleNames ?? value.roleName ?? value.roles ?? value.userRoles))];
+
+	return {
+		id,
+		displayName: name || username || email || `User ${id}`,
+		roleNames,
+	};
 };
 
 const isExceptionLikeLabel = (value: string | null | undefined): boolean => {
@@ -233,14 +280,41 @@ export const useMessagingStore = create<MessageState>((set) => ({
 	unreadMessages: [],
 	unreadCount: 0,
 	selectedMessage: null,
+	directoryUsers: [],
+	directoryLoading: false,
+	directoryError: null,
 	loading: false,
 	error: null,
+
+	fetchDirectoryUsers: async () => {
+		set({ directoryLoading: true, directoryError: null });
+
+		try {
+			const response = await getDirectoryUsersRequest();
+			const currentUserId = useAuthStore.getState().user?.id;
+			const directoryUsers = getDirectoryUserList(response)
+				.map(normalizeDirectoryUser)
+				.filter((user): user is MessageDirectoryUser =>
+					user !== null && String(user.id) !== String(currentUserId),
+				)
+				.sort((first, second) => first.displayName.localeCompare(second.displayName));
+			set({ directoryUsers, directoryLoading: false, directoryError: null });
+		} catch (error: unknown) {
+			const message = getMessagingErrorMessage(error, "Failed to load active users.");
+			set({ directoryLoading: false, directoryError: message });
+		}
+	},
 
 	fetchUserMessages: async () => {
 		set({ loading: true, error: null });
 
 		try {
-			const response = await getUserMessages();
+			const currentUserId = useAuthStore.getState().user?.id;
+			if (currentUserId === undefined || currentUserId === null || currentUserId === "") {
+				throw new Error("User session is missing. Please sign in again.");
+			}
+
+			const response = await getUserMessages(currentUserId);
 			const userMessages = getMessageList(response)
 				.map(normalizeUserMessage)
 				.filter((message): message is UserMessage => message !== null);
@@ -274,37 +348,47 @@ export const useMessagingStore = create<MessageState>((set) => ({
 			set({ loading: true, error: null });
 
 			try {
-				const response = await getUnreadMessages();
-				const unreadMessages = getMessageList(response)
-					.map(normalizeUserMessage)
-					.filter((message): message is UserMessage => message !== null);
-				set({ unreadMessages, loading: false, error: null });
-				return unreadMessages;
+					const currentUserId = useAuthStore.getState().user?.id;
+					if (currentUserId === undefined || currentUserId === null || currentUserId === "") {
+						throw new Error("User session is missing. Please sign in again.");
+					}
+
+					const response = await getUnreadMessages(currentUserId);
+					const unreadMessages = getMessageList(response)
+						.map(normalizeUserMessage)
+						.filter((message): message is UserMessage => message !== null);
+					set({ unreadMessages, loading: false, error: null });
+					return unreadMessages;
+				} catch (error: unknown) {
+					const message = getMessagingErrorMessage(error, "Failed to load unread messages.");
+					set({ unreadMessages: [], loading: false, error: message });
+					return [];
+				}
+			},
+
+		fetchUnreadCount: async () => {
+			set({ loading: true, error: null });
+
+			try {
+				const currentUserId = useAuthStore.getState().user?.id;
+				if (currentUserId === undefined || currentUserId === null || currentUserId === "") {
+					throw new Error("User session is missing. Please sign in again.");
+				}
+
+				const response = await getUnreadCountRequest(currentUserId);
+				const payload = unwrapMessageData(response);
+				if (!isRecord(payload) || typeof payload.unreadCount !== "number" || !Number.isFinite(payload.unreadCount)) {
+					throw new Error("No unread count returned from the API.");
+				}
+
+				set({ unreadCount: payload.unreadCount, loading: false, error: null });
+				return payload.unreadCount;
 			} catch (error: unknown) {
-				const message = getMessagingErrorMessage(error, "Failed to load unread messages.");
-				set({ unreadMessages: [], loading: false, error: message });
-				return [];
+				const message = getMessagingErrorMessage(error, "Failed to load unread message count.");
+				set({ loading: false, error: message });
+				return 0;
 			}
 		},
-
-	fetchUnreadCount: async () => {
-		set({ loading: true, error: null });
-
-		try {
-			const response = await getUnreadCountRequest();
-			const payload = unwrapMessageData(response);
-			if (!isRecord(payload) || typeof payload.unreadCount !== "number" || !Number.isFinite(payload.unreadCount)) {
-				throw new Error("No unread count returned from the API.");
-			}
-
-			set({ unreadCount: payload.unreadCount, loading: false, error: null });
-			return payload.unreadCount;
-		} catch (error: unknown) {
-			const message = getMessagingErrorMessage(error, "Failed to load unread message count.");
-			set({ loading: false, error: message });
-			return 0;
-		}
-	},
 
 	fetchMessageById: async (id) => {
 		set({ loading: true, error: null });
@@ -331,8 +415,19 @@ export const useMessagingStore = create<MessageState>((set) => ({
 		set({ loading: true, error: null });
 
 		try {
-			await markMessageAsReadRequest(id);
-			set((state) => ({
+			const currentUserId = useAuthStore.getState().user?.id;
+			if (currentUserId === undefined || currentUserId === null || currentUserId === "") {
+				throw new Error("User session is missing. Please sign in again.");
+			}
+
+			await markMessageAsReadRequest(id, currentUserId);
+			set((state) => {
+				const wasUnread = state.userMessages.some((message) =>
+					String(message.id) === String(id) &&
+					message.isRead === false &&
+					String(message.senderUserId) !== String(currentUserId),
+				);
+				return {
 				userMessages: state.userMessages.map((message) =>
 					String(message.id) === String(id) ? { ...message, isRead: true } : message,
 				),
@@ -340,9 +435,11 @@ export const useMessagingStore = create<MessageState>((set) => ({
 				selectedMessage: state.selectedMessage && String(state.selectedMessage.id) === String(id)
 					? { ...state.selectedMessage, isRead: true }
 					: state.selectedMessage,
+				unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
 				loading: false,
 				error: null,
-			}));
+				};
+			});
 			return true;
 		} catch (error: unknown) {
 			const message = getMessagingErrorMessage(error, "Failed to mark message as read.");
@@ -355,7 +452,19 @@ export const useMessagingStore = create<MessageState>((set) => ({
 		set({ loading: true, error: null });
 
 		try {
-			const response = await sendMessageRequest(payload);
+			const normalizedPayload = {
+				shipmentId: payload.shipmentId ?? payload.serviceId,
+				recipientId: payload.recipientId ?? payload.recipientUserId,
+				subject: payload.subject?.trim() || "New message",
+				content: payload.content?.trim() || "",
+				type: payload.type ?? 2,
+			};
+
+			if (!normalizedPayload.content) {
+				throw new Error("Message content cannot be empty.");
+			}
+
+			const response = await sendMessageRequest(normalizedPayload as SendMessageRequest);
 			const result = unwrapMessageData(response);
 			if (!isRecord(result) || typeof result.message !== "string" || typeof result.messageId !== "number") {
 				throw new Error("No send confirmation returned from the API.");

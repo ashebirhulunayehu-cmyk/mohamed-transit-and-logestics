@@ -348,18 +348,21 @@ const isPendingService = (record: Record<string, unknown>): boolean => {
 	)) return true;
 
 	const numericStatus = Number(statuses.find((status) => /^\d+$/.test(status)) ?? NaN);
-	return numericStatus === 1 || numericStatus === 3;
+	return numericStatus === 2 || numericStatus === 3;
 };
 
 const getServiceStatus = (record: Record<string, unknown>): string => {
 	const status = readText(record, [
 		"approvalStatus", "serviceStatus", "status", "statusName", "reviewStatus", "submissionStatus",
 	]).toLowerCase();
-	if (status === "4") return "completed";
-	if (status === "5") return "blocked";
-	if (status === "3") return "needs review";
-	if (status === "2") return "in progress";
-	if (status === "1") return "pending";
+	if (status === "1") return "draft";
+	if (status === "2") return "submitted";
+	if (status === "3") return "under review";
+	if (status === "4") return "approved";
+	if (status === "5") return "in progress";
+	if (status === "6" || status === "9") return "completed";
+	if (status === "7") return "rejected";
+	if (status === "8") return "cancelled";
 	return status;
 };
 

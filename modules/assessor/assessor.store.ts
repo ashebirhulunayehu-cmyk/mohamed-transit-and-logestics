@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AssessorEndpoints } from './assessor.endpoint.ts';
+import { AssessorEndpoints } from './assessor.endpoint';
 import type {
   AssessorApiEnvelope,
   AssessorComplianceFeedback,
@@ -12,6 +12,7 @@ import type {
   CustomerApprovalResult,
   PendingCustomerApproval,
   PendingServiceReview,
+  VerifyCustomerDocumentRequest,
 } from './assessor.type';
 
 interface AssessorState {
@@ -35,7 +36,8 @@ interface AssessorState {
   fetchPendingServices: () => Promise<void>;
   fetchServicesUnderOversight: () => Promise<void>;
   fetchServiceWorklists: () => Promise<void>;
-  approveCustomer: (payload: { customerId: number; isApproved: boolean; notes: string | null }) => Promise<CustomerApprovalResult>;
+  approveCustomer: (payload: { customerId: number; isApproved: boolean; notes: string | null; returnForRevision?: boolean }) => Promise<CustomerApprovalResult>;
+  verifyCustomerDocument: (payload: VerifyCustomerDocumentRequest) => Promise<void>;
   reviewService: (payload: AssessorServiceReviewRequest) => Promise<AssessorReviewedService>;
   addComplianceFeedback: (payload: AssessorComplianceFeedbackRequest) => Promise<AssessorComplianceFeedback>;
   fetchDashboard: () => Promise<void>;
@@ -239,10 +241,25 @@ export const useAssessorStore = create<AssessorState>((set, get) => ({
     try {
       const approvedCustomer = await AssessorEndpoints.approveCustomer(payload);
       await get().fetchPendingCustomers();
+      await get().fetchDashboard();
       set({ loading: false });
       return approvedCustomer;
     } catch (err: unknown) {
       set({ error: getErrorMessage(err, 'Action failed'), loading: false });
+      throw err;
+    }
+  },
+
+  verifyCustomerDocument: async (payload) => {
+    set({ loading: true, error: null });
+    try {
+      await AssessorEndpoints.verifyCustomerDocument(payload);
+      await get().fetchPendingCustomers();
+      await get().fetchDashboard();
+      set({ loading: false, error: null });
+    } catch (err: unknown) {
+      const message = getErrorMessage(err, 'Failed to update customer document verification');
+      set({ error: message, loading: false });
       throw err;
     }
   },
@@ -252,6 +269,7 @@ export const useAssessorStore = create<AssessorState>((set, get) => ({
     try {
       const reviewedService = await AssessorEndpoints.reviewService(payload);
       set({ reviewedService, loading: false, error: null });
+      await get().fetchDashboard();
       return reviewedService;
     } catch (err: unknown) {
       set({ error: getErrorMessage(err, 'Service review failed'), loading: false });

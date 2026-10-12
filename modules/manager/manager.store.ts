@@ -359,6 +359,10 @@ const EMPTY_MANAGER_SUMMARY: ManagerDashboardSummary = {
   pendingServices: 0,
   inProgressServices: 0,
   completedServices: 0,
+  openCases: 0,
+  needsAttention: 0,
+  dueWithin48Hours: null,
+  clearedThisMonth: 0,
   totalCustomers: 0,
   verifiedCustomers: 0,
   totalStaff: 0,
@@ -382,6 +386,12 @@ const normalizeManagerDashboardSummary = (value: unknown): ManagerDashboardSumma
     pendingServices: normalizeNumber(value.pendingServices),
     inProgressServices: normalizeNumber(value.inProgressServices),
     completedServices: normalizeNumber(value.completedServices),
+    openCases: value.openCases === undefined ? undefined : normalizeNumber(value.openCases),
+    needsAttention: value.needsAttention === undefined ? undefined : normalizeNumber(value.needsAttention),
+    dueWithin48Hours: value.dueWithin48Hours === null || value.dueWithin48Hours === undefined
+      ? null
+      : normalizeNumber(value.dueWithin48Hours),
+    clearedThisMonth: value.clearedThisMonth === undefined ? undefined : normalizeNumber(value.clearedThisMonth),
     totalCustomers: normalizeNumber(value.totalCustomers),
     verifiedCustomers: normalizeNumber(value.verifiedCustomers),
     totalStaff: normalizeNumber(value.totalStaff),
