@@ -5,7 +5,6 @@ import { useAuthStore } from "@/modules/auth/auth.store";
 import AssessorDashboardPage from "./components/assessor";
 import ManagerDashboard from "./components/manager";
 import CaseExecutorDashboardPage from "../case-Executer/page";
-import DataEncoderDashboard from "@/components/data-encoder/DataEncoderDashboard";
 
 const normalizeRole = (value: unknown): string => {
   if (!value) return "";

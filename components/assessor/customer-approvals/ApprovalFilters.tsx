@@ -21,6 +21,7 @@ export const ApprovalFilters: React.FC<ApprovalFiltersProps> = ({
     { id: 'All', label: 'All Applicants', count: counts.all },
     { id: 'Pending check', label: 'Pending Check', count: counts.pending },
     { id: 'Returned for revision', label: 'Returned for revision', count: counts.returned },
+    { id: 'Flagged', label: 'Flagged', count: counts.flagged },
   ];
 
   return (

@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { normalizeApiBaseUrl } from "@/modules/utils/axios/config";
+import { CustomerContextError, getCustomerRequestContext } from "../_shared";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -25,31 +24,9 @@ const normalizeTaxStatuses = (value: unknown): unknown => {
 };
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const accessToken =
-    cookieStore.get("accessToken")?.value ??
-    cookieStore.get("transit-portal-accessToken")?.value ??
-    cookieStore.get("MohamedTransit-portal-accessToken")?.value;
-
-  if (!accessToken) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  }
-
-  const customerUserId =
-    process.env.CUSTOMER_SIDEBAR_USER_ID ??
-    (process.env.NODE_ENV === "development" ? "3" : "");
-  if (!/^\d+$/.test(customerUserId)) {
-    return NextResponse.json(
-      { error: "The authenticated customer ID is not configured." },
-      { status: 500 },
-    );
-  }
-
-  const backendUrl = normalizeApiBaseUrl(
-    process.env.BACKEND_API_URL ?? process.env.NEXT_PUBLIC_API_URL,
-  );
-
   try {
+    const { accessToken, backendUrl, customerUserId } =
+      await getCustomerRequestContext();
     const response = await fetch(
       `${backendUrl}/TaxRecords/GetByCustomer/${customerUserId}`,
       {
@@ -118,6 +95,9 @@ export async function GET() {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error: unknown) {
+    if (error instanceof CustomerContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Customer tax records proxy request failed:", error);
     return NextResponse.json(
       { error: "Unable to reach the backend for tax records." },

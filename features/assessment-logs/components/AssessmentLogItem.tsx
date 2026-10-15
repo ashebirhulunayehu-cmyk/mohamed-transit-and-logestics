@@ -2,7 +2,7 @@
 
 import React from "react";
 import type { AssessmentLog } from "../assessmentLog.types";
-import { CheckCircle2, AlertOctagon, Send, AlertTriangle, RotateCcw } from "lucide-react";
+import { CheckCircle2, AlertOctagon, Send, RotateCcw } from "lucide-react";
 
 interface AssessmentLogItemProps {
   log: AssessmentLog;

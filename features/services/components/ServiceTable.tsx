@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useServiceStore } from "../service.store";
 import { useAssessorStore } from "@/modules/assessor/assessor.store";
-import type { ServiceRecord, ServiceStatus, RiskChannel } from "../service.types";
+import type { ServiceColumn, ServiceRecord, ServiceStatus, RiskChannel } from "../service.types";
+import { useManagerStore } from "@/modules/manager/manager.store";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -24,11 +25,15 @@ function ServiceRow({
   lang,
   renderStatusBadge,
   renderRiskBadge,
+  managerView,
+  visibleColumns,
 }: {
   row: ServiceRecord;
   lang: string;
   renderStatusBadge: (status: ServiceStatus) => React.ReactNode;
   renderRiskBadge: (channel: RiskChannel) => React.ReactNode;
+  managerView: boolean;
+  visibleColumns: ServiceColumn[];
 }) {
   const [formOpen, setFormOpen] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -38,6 +43,7 @@ function ServiceRow({
   const addComplianceFeedback = useAssessorStore((state) => state.addComplianceFeedback);
   const serviceId = Number(row.shipmentId ?? row.id);
   const canSubmit = Number.isInteger(serviceId) && serviceId > 0;
+  const visibleColumnCount = visibleColumns.length;
 
   const submitFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -59,53 +65,60 @@ function ServiceRow({
   return (
     <>
       <tr className="hover:bg-slate-50/60 transition-colors">
-        <td className="py-3.5 px-4">
+        {visibleColumns.includes("service") && <td className="py-3.5 px-4">
           <div className="flex items-center gap-2">
-            {row.status === "Submitted" ? (
+            {managerView ? (
               <Link
-                href={`/${lang}/admin/assessor/service-reviews/${row.shipmentId ?? row.id}`}
+                href={`/${lang}/admin/manager/services/${encodeURIComponent(row.shipmentId ?? row.id)}`}
                 className="font-semibold text-sky-700 hover:underline"
               >
                 {row.id}
               </Link>
             ) : (
-              <span className="font-semibold text-sky-700">{row.id}</span>
+              <Link
+                href={`/${lang}/admin/assessor/services/${encodeURIComponent(row.id)}`}
+                className="font-semibold text-sky-700 hover:underline"
+              >
+                {row.id}
+              </Link>
             )}
-            <button
-              type="button"
-              disabled={!canSubmit}
-              onClick={() => {
-                setFormOpen((open) => !open);
-                setSuccess(false);
-                setError(null);
-              }}
-              aria-label={`Send compliance feedback for ${row.id}`}
-              title={canSubmit ? "Compliance feedback" : "Feedback unavailable: missing numeric service ID"}
-              className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <MessageSquarePlus className="h-3.5 w-3.5" />
-            </button>
+            {!managerView && (
+              <button
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => {
+                  setFormOpen((open) => !open);
+                  setSuccess(false);
+                  setError(null);
+                }}
+                aria-label={`Send compliance feedback for ${row.id}`}
+                title={canSubmit ? "Compliance feedback" : "Feedback unavailable: missing numeric service ID"}
+                className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <MessageSquarePlus className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
           <span className="text-slate-500 text-[11px] block mt-0.5">
             {row.title}
           </span>
-        </td>
-        <td className="py-3.5 px-4">
+        </td>}
+        {visibleColumns.includes("importer") && <td className="py-3.5 px-4">
           <span className="font-semibold text-slate-800 block">
             {row.importerName}
           </span>
           <span className="text-[11px] font-mono text-slate-400 block mt-0.5">
             {row.importerCode}
           </span>
-        </td>
-        <td className="py-3.5 px-4 text-slate-700 font-medium">{row.mode}</td>
-        <td className="py-3.5 px-4">{renderStatusBadge(row.status)}</td>
-        <td className="py-3.5 px-4">{renderRiskBadge(row.riskChannel)}</td>
-        <td className="py-3.5 px-4 text-slate-800 font-medium">
+        </td>}
+        {visibleColumns.includes("mode") && <td className="py-3.5 px-4 text-slate-700 font-medium">{row.mode}</td>}
+        {visibleColumns.includes("status") && <td className="py-3.5 px-4">{renderStatusBadge(row.status)}</td>}
+        {visibleColumns.includes("risk") && <td className="py-3.5 px-4">{renderRiskBadge(row.riskChannel)}</td>}
+        {visibleColumns.includes("caseExecutor") && <td className="py-3.5 px-4 text-slate-800 font-medium">
           {row.caseExecutor}
-        </td>
-        <td className="py-3.5 px-4 text-slate-700">{row.eta}</td>
-        <td className="py-3.5 px-4">
+        </td>}
+        {visibleColumns.includes("eta") && <td className="py-3.5 px-4 text-slate-700">{row.eta}</td>}
+        {visibleColumns.includes("sla") && <td className="py-3.5 px-4">
           <span
             className={`font-semibold ${
               row.isOverdue
@@ -117,12 +130,12 @@ function ServiceRow({
           >
             {row.sla}
           </span>
-        </td>
-        <td className="py-3.5 px-4 text-slate-400">{row.updated}</td>
+        </td>}
+        {visibleColumns.includes("updated") && <td className="py-3.5 px-4 text-slate-400">{row.updated}</td>}
       </tr>
-      {formOpen && (
+      {!managerView && formOpen && (
         <tr>
-          <td colSpan={9} className="bg-slate-50 px-4 py-3">
+          <td colSpan={visibleColumnCount} className="bg-slate-50 px-4 py-3">
             <form onSubmit={(event) => void submitFeedback(event)} className="mx-auto max-w-2xl space-y-3">
               <label className="block text-xs font-medium text-slate-700">
                 Compliance feedback
@@ -155,13 +168,30 @@ function ServiceRow({
   );
 }
 
-export function ServiceTable() {
+export function ServiceTable({
+  managerView = false,
+  onPageChange,
+}: {
+  managerView?: boolean;
+  onPageChange?: (page: number) => void;
+} = {}) {
+  const [updatedSort, setUpdatedSort] = useState<"asc" | "desc">("desc");
   const { lang } = useParams<{ lang: string }>();
   const getFilteredServices = useServiceStore((state) => state.getFilteredServices);
   const services = useServiceStore((state) => state.services);
+  const visibleColumns = useServiceStore((state) => state.visibleColumns);
   const loading = useServiceStore((state) => state.loading);
   const error = useServiceStore((state) => state.error);
+  const servicePagination = useManagerStore((state) => state.servicePagination);
   const filteredData = getFilteredServices();
+  const sortedData = [...filteredData].sort((a, b) => {
+    const aTimestamp = a.updatedAtTimestamp ?? Number.NEGATIVE_INFINITY;
+    const bTimestamp = b.updatedAtTimestamp ?? Number.NEGATIVE_INFINITY;
+    return updatedSort === "desc" ? bTimestamp - aTimestamp : aTimestamp - bTimestamp;
+  });
+  const page = managerView ? servicePagination.page : 1;
+  const totalPages = managerView ? servicePagination.totalPages : 1;
+  const visibleColumnCount = visibleColumns.length;
 
   const renderStatusBadge = (status: ServiceStatus) => {
     switch (status) {
@@ -292,25 +322,30 @@ export function ServiceTable() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              <th className="py-3 px-4">SERVICE</th>
-              <th className="py-3 px-4">IMPORTER</th>
-              <th className="py-3 px-4">MODE</th>
-              <th className="py-3 px-4">STATUS</th>
-              <th className="py-3 px-4">RISK</th>
-              <th className="py-3 px-4">CASE EXECUTOR</th>
-              <th className="py-3 px-4">ETA</th>
-              <th className="py-3 px-4">SLA</th>
-              <th className="py-3 px-4">
-                <div className="flex items-center gap-1 cursor-pointer">
+              {visibleColumns.includes("service") && <th className="py-3 px-4">SERVICE</th>}
+              {visibleColumns.includes("importer") && <th className="py-3 px-4">IMPORTER</th>}
+              {visibleColumns.includes("mode") && <th className="py-3 px-4">MODE</th>}
+              {visibleColumns.includes("status") && <th className="py-3 px-4">STATUS</th>}
+              {visibleColumns.includes("risk") && <th className="py-3 px-4">RISK</th>}
+              {visibleColumns.includes("caseExecutor") && <th className="py-3 px-4">CASE EXECUTOR</th>}
+              {visibleColumns.includes("eta") && <th className="py-3 px-4">ETA</th>}
+              {visibleColumns.includes("sla") && <th className="py-3 px-4">SLA</th>}
+              {visibleColumns.includes("updated") && <th className="py-3 px-4">
+                <button
+                  type="button"
+                  onClick={() => setUpdatedSort((direction) => direction === "desc" ? "asc" : "desc")}
+                  className="flex items-center gap-1"
+                  aria-label={`Sort updated date ${updatedSort === "desc" ? "oldest first" : "newest first"}`}
+                >
                   UPDATED <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                </div>
-              </th>
+                </button>
+              </th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs">
             {loading && filteredData.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={visibleColumnCount} className="px-4 py-10 text-center text-sm text-slate-500">
                   <span className="inline-flex items-center gap-2">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                     Loading services...
@@ -319,7 +354,7 @@ export function ServiceTable() {
               </tr>
             ) : filteredData.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={visibleColumnCount} className="px-4 py-10 text-center text-sm text-slate-500">
                   {error
                     ? "Services could not be loaded."
                     : services.length === 0
@@ -327,13 +362,15 @@ export function ServiceTable() {
                       : "No services match your filters."}
                 </td>
               </tr>
-            ) : filteredData.map((row) => (
+            ) : sortedData.map((row) => (
               <ServiceRow
                 key={row.id}
                 row={row}
                 lang={lang}
                 renderStatusBadge={renderStatusBadge}
                 renderRiskBadge={renderRiskBadge}
+                managerView={managerView}
+                visibleColumns={visibleColumns}
               />
             ))}
           </tbody>
@@ -342,18 +379,26 @@ export function ServiceTable() {
 
       {/* Pagination Footer */}
       <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-        <span>Showing {filteredData.length} of {services.length} services</span>
+        <span>
+          {managerView
+            ? `Page ${page} of ${Math.max(totalPages, 1)} · ${servicePagination.totalCount} services`
+            : `Showing ${filteredData.length} of ${services.length} services`}
+        </span>
         <div className="flex items-center gap-2">
           <button
-            disabled
-            className="px-3 py-1.5 border border-slate-200 rounded-md text-slate-400 bg-slate-50 cursor-not-allowed"
+            type="button"
+            disabled={!managerView || loading || page <= 1}
+            onClick={() => onPageChange?.(page - 1)}
+            className="px-3 py-1.5 border border-slate-200 rounded-md text-slate-600 bg-white hover:bg-slate-50 disabled:text-slate-400 disabled:bg-slate-50 disabled:cursor-not-allowed"
           >
             Previous
           </button>
-          <span className="px-2 font-medium text-slate-700">Page 1 of 1</span>
+          <span className="px-2 font-medium text-slate-700">Page {page} of {Math.max(totalPages, 1)}</span>
           <button
-            disabled
-            className="px-3 py-1.5 border border-slate-200 rounded-md text-slate-400 bg-slate-50 cursor-not-allowed"
+            type="button"
+            disabled={!managerView || loading || page >= totalPages}
+            onClick={() => onPageChange?.(page + 1)}
+            className="px-3 py-1.5 border border-slate-200 rounded-md text-slate-600 bg-white hover:bg-slate-50 disabled:text-slate-400 disabled:bg-slate-50 disabled:cursor-not-allowed"
           >
             Next
           </button>

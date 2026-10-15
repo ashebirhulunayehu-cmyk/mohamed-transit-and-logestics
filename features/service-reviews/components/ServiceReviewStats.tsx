@@ -1,48 +1,69 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useServiceReviewStore } from "../serviceReview.store";
-import { FileText, AlertTriangle, CircleAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileText, Send } from "lucide-react";
+import { useAssessorStore } from "@/modules/assessor/assessor.store";
 
 export function ServiceReviewStats() {
   const stats = useServiceReviewStore((state) => state.stats);
+  const completedReviewsToday = useAssessorStore(
+    (state) => state.dashboardData?.completedReviewsToday ?? null,
+  );
+  const dashboardError = useAssessorStore((state) => state.dashboardError);
+  const dashboardLoading = useAssessorStore((state) => state.dashboardLoading);
+  const fetchDashboard = useAssessorStore((state) => state.fetchDashboard);
+
+  useEffect(() => {
+    void fetchDashboard();
+  }, [fetchDashboard]);
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {/* Awaiting Review */}
       <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-amber-500 bg-white p-5 shadow-sm">
         <div>
           <p className="text-xs font-medium text-slate-500">Awaiting review</p>
-          <p className="text-3xl font-bold text-slate-900 mt-2">{stats.awaitingReview}</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{stats.awaitingReview}</p>
         </div>
-        <FileText className="w-5 h-5 text-slate-400" />
+        <FileText aria-hidden="true" className="h-5 w-5 text-slate-400" />
       </div>
 
-      {/* Red Channel */}
       <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-rose-500 bg-white p-5 shadow-sm">
         <div>
           <p className="text-xs font-medium text-slate-500">Red channel</p>
-          <p className="text-3xl font-bold text-slate-900 mt-2">{stats.redChannel}</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{stats.redChannel}</p>
+          <p className="mt-1 max-w-44 text-[11px] text-slate-500">
+            Physical inspection and valuation review
+          </p>
         </div>
-        <AlertTriangle className="w-5 h-5 text-slate-400" />
+        <AlertTriangle aria-hidden="true" className="h-5 w-5 text-slate-400" />
       </div>
 
-      {/* Documents available */}
       <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-sky-500 bg-white p-5 shadow-sm">
         <div>
-          <p className="text-xs font-medium text-slate-500">Cases with documents</p>
-          <p className="text-3xl font-bold text-slate-900 mt-2">{stats.withDocuments}</p>
+          <p className="text-xs font-medium text-slate-500">Submitted for review</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{stats.submittedForReview}</p>
         </div>
-        <FileText className="w-5 h-5 text-slate-400" />
+        <Send aria-hidden="true" className="h-5 w-5 text-slate-400" />
       </div>
 
-      {/* Unverified documents */}
-      <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-rose-500 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between rounded-xl border border-slate-200/80 border-l-4 border-l-emerald-500 bg-white p-5 shadow-sm">
         <div>
-          <p className="text-xs font-medium text-slate-500">Unverified documents</p>
-          <p className="text-3xl font-bold text-slate-900 mt-2">{stats.unverifiedDocuments}</p>
+          <p className="text-xs font-medium text-slate-500">Signed off today</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">
+            {dashboardError
+              ? "Unavailable"
+              : dashboardLoading && completedReviewsToday === null
+                ? "…"
+                : completedReviewsToday ?? "—"}
+          </p>
+          {dashboardError && (
+            <p role="alert" className="mt-1 max-w-44 text-[11px] text-rose-700">
+              Could not load dashboard count: {dashboardError}
+            </p>
+          )}
         </div>
-        <CircleAlert className="w-5 h-5 text-slate-400" />
+        <CheckCircle2 aria-hidden="true" className="h-5 w-5 text-slate-400" />
       </div>
     </div>
   );

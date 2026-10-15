@@ -10,7 +10,6 @@ import {
   FileText,
   UsersRound,
   BriefcaseBusiness,
-  CheckCircle2,
   AlertTriangle,
   Activity,
   ArrowRight,

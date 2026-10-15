@@ -22,7 +22,6 @@ export function ShipmentOperations() {
     createShipmentAction,
     assignShipmentAction,
     updateShipmentAction,
-    updateShipmentStatusAction,
     updateShipmentServiceStageAction,
     updateShipmentStageStatusAction,
     uploadShipmentDocumentAction,

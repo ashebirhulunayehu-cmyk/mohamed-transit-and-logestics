@@ -6,6 +6,7 @@ import { Button, Card, Col, Input, Modal, Row, Skeleton, Statistic, message } fr
 import { useAssessorStore } from '@/modules/assessor/assessor.store';
 import type { AssessorItem } from '@/modules/assessor/assessor.type';
 import { useServiceReviewStore } from '@/features/service-reviews/serviceReview.store';
+import { isServiceSubmitted } from '@/features/service-reviews/serviceReview.utils';
 import type { ServiceCase } from '@/features/service-reviews/serviceReview.types';
 import { useAuditStore } from '@/features/audit-logs/audit-logs-store';
 
@@ -309,6 +310,10 @@ export default function AssessorDashboardPage() {
   const handleReviewService = async (isApproved: boolean) => {
     if (!selectedReviewCase?.shipmentId) {
       messageApi.error('This service does not have a valid shipment ID.');
+      return;
+    }
+    if (!isServiceSubmitted(selectedReviewCase.status)) {
+      messageApi.error(`Only submitted services can be reviewed. Current status: ${selectedReviewCase.status}.`);
       return;
     }
     if (!isApproved && !reviewNotes.trim()) {
@@ -685,7 +690,7 @@ export default function AssessorDashboardPage() {
         </Button>,
         <Button
           key="return"
-          disabled={reviewLoading}
+          disabled={reviewLoading || !selectedReviewCase || !isServiceSubmitted(selectedReviewCase.status)}
           loading={reviewLoading}
           onClick={() => void handleReviewService(false)}
         >
@@ -694,7 +699,7 @@ export default function AssessorDashboardPage() {
         <Button
           key="approve"
           type="primary"
-          disabled={reviewLoading}
+          disabled={reviewLoading || !selectedReviewCase || !isServiceSubmitted(selectedReviewCase.status)}
           loading={reviewLoading}
           onClick={() => void handleReviewService(true)}
         >
@@ -709,6 +714,11 @@ export default function AssessorDashboardPage() {
             <p className="text-xs text-slate-500">
               Shipment #{selectedReviewCase.shipmentId} · {selectedReviewCase.trackingNumber} · {selectedReviewCase.importer}
             </p>
+            {!isServiceSubmitted(selectedReviewCase.status) && (
+              <p role="status" className="mt-2 text-xs text-amber-700">
+                Only submitted services can be reviewed. Current status: {selectedReviewCase.status}.
+              </p>
+            )}
           </div>
           <Input.TextArea
             value={reviewNotes}

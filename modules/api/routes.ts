@@ -37,15 +37,30 @@ export const API_ROUTES = {
   },
   seeder: {
     seed: "/Seeder/seed",
+    credentials: "/Seeder/credentials",
   },
   assessor: {
     getPendingCustomerApprovals: "/Assessor/GetPendingCustomerApprovals",
     approveCustomer: "/Assessor/ApproveCustomer",
     verifyCustomerDocument: "/Assessor/VerifyCustomerDocument",
+    downloadCustomerDocument: "/Assessor/DownloadCustomerDocument",
     getPendingServices: "/Assessor/GetPendingServiceReviews",
     getPendingServiceReviews: "/Assessor/GetPendingServiceReviews",
+    getServiceDetails: (id: number | string) =>
+      `/Assessor/GetServiceDetails/${encodeURIComponent(String(id))}`,
+    getConsignmentDetails: (serviceId: number | string) =>
+      `/Assessor/GetConsignmentDetails/${encodeURIComponent(String(serviceId))}`,
+    getServiceStages: (serviceId: number | string) =>
+      `/Assessor/GetServiceStages/${encodeURIComponent(String(serviceId))}`,
+    getStageDiscussions: (serviceId: number | string, stageId: number | string) =>
+      `/Assessor/GetStageDiscussions/${encodeURIComponent(String(serviceId))}/${encodeURIComponent(String(stageId))}`,
+    addStageDiscussion: "/Assessor/AddStageDiscussion",
+    getAssessmentDocuments: "/Assessor/GetAssessmentDocuments",
     getActiveServicesForRegister: "/Assessor/GetActiveServicesForRegister",
+    recordAssessment: "/Assessor/RecordAssessment",
     reviewService: "/Assessor/ReviewService",
+    escalateService: "/Assessor/EscalateService",
+    notifyImporter: "/Assessor/NotifyImporter",
     getServicesUnderOversight: "/Assessor/GetServicesUnderOversight",
     addComplianceFeedback: "/Assessor/AddComplianceFeedback",
     getDashboard: "/Assessor/GetDashboard",
@@ -62,6 +77,7 @@ export const API_ROUTES = {
     getAllStaff: "/Manager/GetAllStaff",
     getAllCustomers: "/Manager/GetAllCustomers",
     getNotifications: "/Manager/GetNotifications",
+    getSupportRequests: "/SupportRequests",
   },
   dashboard: {
     view: "/Dashboard/View",

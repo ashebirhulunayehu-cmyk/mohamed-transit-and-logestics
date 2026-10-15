@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, TrendingUp, AlertCircle } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 
 interface TeamMember {
   id: string;

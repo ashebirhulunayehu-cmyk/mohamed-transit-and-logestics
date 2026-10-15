@@ -1,6 +1,6 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { normalizeApiBaseUrl } from "@/modules/utils/axios/config";
+import { getCustomerAccessToken } from "../_shared";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -59,24 +59,10 @@ const readBackendError = (value: unknown): string | null => {
 };
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const accessToken =
-    cookieStore.get("accessToken")?.value ??
-    cookieStore.get("transit-portal-accessToken")?.value ??
-    cookieStore.get("MohamedTransit-portal-accessToken")?.value;
+  const accessToken = await getCustomerAccessToken();
 
   if (!accessToken) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  }
-
-  const customerUserId =
-    process.env.CUSTOMER_SIDEBAR_USER_ID ??
-    (process.env.NODE_ENV === "development" ? "3" : "");
-  if (!/^\d+$/.test(customerUserId)) {
-    return NextResponse.json(
-      { error: "The authenticated customer ID is not configured correctly." },
-      { status: 500 },
-    );
   }
 
   const backendUrl = normalizeApiBaseUrl(

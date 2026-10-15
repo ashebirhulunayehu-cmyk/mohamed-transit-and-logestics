@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:api": "dotnet run --project backend\\src\\MohamedTransit.API\\MohamedTransit.API.csproj --launch-profile http",
-    "dev:all": "concurrently -k -n API,WEB -c cyan,magenta \"npm:dev:api\" \"npm:dev\"",
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "dev:api": "node -e \"const fs=require('fs'); const path='backend/src/MohamedTransit.API/MohamedTransit.API.csproj'; if (!fs.existsSync(path)) { console.log('Backend project not found at ' + path + '. Skipping API startup.'); process.exit(0); } const { spawn } = require('child_process'); const child = spawn('dotnet', ['run', '--project', path, '--launch-profile', 'http'], { stdio: 'inherit', shell: true }); child.on('exit', (code) => process.exit(code ?? 0));\"",
+    "dev:all": "concurrently -n API,WEB -c cyan,magenta \"npm:dev:api\" \"npm:dev\"",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0 -p 3000",
     "lint": "eslint"
   },
   "dependencies": {

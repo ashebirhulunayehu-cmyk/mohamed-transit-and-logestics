@@ -18,7 +18,9 @@ interface ApprovalDetailsProps {
   onRevision?: (id?: string, note?: string) => void;
   onReject?: (id?: string, note?: string) => void;
   onVerifyDocument?: (documentId: string, isVerified: boolean, note: string) => void;
+  onDownloadDocument?: (documentId: string, fileName: string) => void;
   actionLoading?: boolean;
+  documentDownloadId?: string | null;
   documentActionId?: string | null;
 }
 
@@ -28,10 +30,23 @@ export function ApprovalDetails({
   onRevision,
   onReject,
   onVerifyDocument,
+  onDownloadDocument,
   actionLoading = false,
+  documentDownloadId = null,
   documentActionId = null,
 }: ApprovalDetailsProps) {
   const [note, setNote] = useState("");
+  const checklist = applicant?.checklist ?? [];
+  const hasUnverifiedDocuments = checklist.some(
+    (item) => !item.isVerified && !item.isExpired,
+  );
+  const hasExpiredDocuments = checklist.some((item) => item.isExpired);
+  const approvalBlocked = hasUnverifiedDocuments || hasExpiredDocuments;
+
+  const formatDate = (value: string) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -61,6 +76,13 @@ export function ApprovalDetails({
           <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-600"></span>
             Returned for revision
+          </span>
+        );
+      case "Rejected":
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-800">
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-600"></span>
+            Rejected
           </span>
         );
       default:
@@ -126,7 +148,7 @@ export function ApprovalDetails({
             <span className="text-slate-800">{applicant.importLicense}</span>
             {applicant.importLicenseExpiry && (
               <span className="mt-1 block text-xs text-slate-500">
-                Expires {new Date(applicant.importLicenseExpiry).toLocaleDateString()}
+                Expires {formatDate(applicant.importLicenseExpiry)}
               </span>
             )}
           </div>
@@ -140,11 +162,11 @@ export function ApprovalDetails({
 
           <div>
             <span className="text-slate-500 block text-xs font-medium">Registered on</span>
-            <span className="text-slate-800">{applicant.registeredDate}</span>
+            <span className="text-slate-800">{formatDate(applicant.registeredDate)}</span>
           </div>
           <div>
             <span className="text-slate-500 block text-xs font-medium">Active services</span>
-            <span className="text-slate-800">{applicant.activeServices}</span>
+            <span className="text-slate-800">{applicant.activeServices ?? "Not available"}</span>
           </div>
           {applicant.verificationNotes && (
             <p className="col-span-2 mt-4 rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-amber-900">
@@ -194,21 +216,32 @@ export function ApprovalDetails({
                   </p>
                 )}
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs text-slate-400">File download is not available for customer documents in the current API.</span>
-                  {onVerifyDocument && !item.isExpired && (
-                    <button
-                      type="button"
-                      onClick={() => onVerifyDocument(item.id, !item.isVerified, note)}
-                      disabled={actionLoading || documentActionId === item.id}
-                      className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
-                    >
-                      {documentActionId === item.id
-                        ? "Saving…"
-                        : item.isVerified
-                          ? "Mark unverified"
-                          : "Mark verified"}
-                    </button>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {onDownloadDocument && (
+                      <button
+                        type="button"
+                        onClick={() => onDownloadDocument(item.id, item.name)}
+                        disabled={documentDownloadId === item.id}
+                        className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
+                      >
+                        {documentDownloadId === item.id ? "Downloading…" : "Download file"}
+                      </button>
+                    )}
+                    {onVerifyDocument && !item.isExpired && (
+                      <button
+                        type="button"
+                        onClick={() => onVerifyDocument(item.id, !item.isVerified, note)}
+                        disabled={actionLoading || documentActionId === item.id}
+                        className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
+                      >
+                        {documentActionId === item.id
+                          ? "Saving…"
+                          : item.isVerified
+                            ? "Mark unverified"
+                            : "Mark verified"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -234,8 +267,13 @@ export function ApprovalDetails({
           <button
             type="button"
             onClick={() => onApprove?.(applicant.id, note)}
-            disabled={actionLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-sm font-medium transition-colors"
+            disabled={actionLoading || approvalBlocked}
+            title={
+              approvalBlocked
+                ? "Verify all active documents and resolve expired documents before approval."
+                : undefined
+            }
+            className="flex items-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <CheckCircle2 className="w-4 h-4" />
             Approve importer

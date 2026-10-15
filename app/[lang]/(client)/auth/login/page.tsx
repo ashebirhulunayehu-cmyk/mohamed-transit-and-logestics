@@ -100,52 +100,58 @@ export default function LoginPage() {
     return "";
   };
 
+  const normalizeRole = (roleName: string): string => roleName.trim().toLowerCase().replace(/[^a-z]/g, "");
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     setError("");
 
     try {
-      await login({
+      const userObj = await login({
         username: email.trim(),
         password,
       });
 
-      const userObj = useAuthStore.getState().user;
-      const extractedRole = extractRole(userObj).toLowerCase().trim();
-      const normalizedRole = extractedRole.toLowerCase();
-      const roleKey = normalizedRole.replace(/[^a-z]/g, "");
+      const extractedRole = normalizeRole(extractRole(userObj));
       const destination = callbackUrl && callbackUrl.startsWith("/") ? callbackUrl : `/${lang}/customer`;
 
-      if (roleKey === "caseexecutor" || roleKey === "caseexecuter") {
+      if (extractedRole === "caseexecutor" || extractedRole === "caseexecuter") {
         router.push(`/${lang}/admin/case-Executer`);
         return;
       }
 
-      if (normalizedRole === "dataencoder" || normalizedRole === "dataencoderoperator") {
+      if (extractedRole === "dataencoder" || extractedRole === "dataencoderoperator") {
         router.push(`/${lang}/admin/data-encoder/dashboard`);
         return;
       }
 
       if (
-        normalizedRole === "superadmin" ||
-        normalizedRole === "admin" ||
-        normalizedRole === "assessor" ||
-        normalizedRole === "manager"
+        extractedRole === "superadmin" ||
+        extractedRole === "admin" ||
+        extractedRole === "assessor"
       ) {
         router.push(
-          normalizedRole === "manager"
-            ? `/${lang}/admin/dashboard?role=manager`
-            : `/${lang}/admin/dashboard?role=${encodeURIComponent(normalizedRole)}`
+          `/${lang}/admin/dashboard?role=${encodeURIComponent(extractedRole)}`
         );
         return;
       }
 
+      if (extractedRole === "manager") {
+        const managerBasePath = `/${lang}/admin/manager`;
+        const managerDestination =
+          callbackUrl === managerBasePath || callbackUrl.startsWith(`${managerBasePath}/`)
+            ? callbackUrl
+            : `${managerBasePath}/dashboard`;
+        router.push(managerDestination);
+        return;
+      }
+
       if (
-        !normalizedRole ||
-        normalizedRole.includes("customer") ||
-        normalizedRole.includes("importer") ||
-        normalizedRole.includes("user")
+        !extractedRole ||
+        extractedRole.includes("customer") ||
+        extractedRole.includes("importer") ||
+        extractedRole.includes("user")
       ) {
         router.push(destination);
         return;

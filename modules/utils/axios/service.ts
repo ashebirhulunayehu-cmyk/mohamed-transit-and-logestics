@@ -8,7 +8,7 @@ import type {
 
 import { config } from "./config";
 import { getToken } from "../token";
-import { getTokenClient } from "../token/client-token.storage";
+import { deleteTokensClient, getTokenClient } from "../token/client-token.storage";
 
 /* =========================================================
    API Response Type
@@ -225,6 +225,7 @@ function redirectToLogin() {
   }
 
   try {
+    deleteTokensClient();
     localStorage.removeItem("token");
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");

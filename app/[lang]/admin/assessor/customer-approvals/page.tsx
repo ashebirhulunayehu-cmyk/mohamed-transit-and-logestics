@@ -25,6 +25,65 @@ const getText = (...values: unknown[]): string => {
   return typeof value === "string" ? value : "";
 };
 
+const getBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number" && (value === 0 || value === 1)) {
+    return value === 1;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes"].includes(normalized)) return true;
+    if (["false", "0", "no"].includes(normalized)) return false;
+  }
+  return undefined;
+};
+
+const normalizeApprovalStatus = (customer: AssessorItem): ApprovalStatus => {
+  const returnedForRevision = getBoolean(
+    customer.isReturnedForRevision ?? customer.returnedForRevision,
+  );
+  if (returnedForRevision) return "Returned for revision";
+
+  const rawStatus = getText(
+    customer.approvalStatus,
+    customer.verificationStatus,
+    customer.kycStatus,
+    customer.status,
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+
+  if (
+    ["returned", "returnedforrevision", "revisionrequired", "needsrevision"].includes(
+      rawStatus,
+    )
+  ) {
+    return "Returned for revision";
+  }
+  if (["flagged", "requiresattention"].includes(rawStatus)) return "Flagged";
+  if (["verified", "approved", "complete", "completed"].includes(rawStatus)) {
+    return "Verified";
+  }
+  if (["rejected", "declined"].includes(rawStatus)) return "Rejected";
+  if (rawStatus === "expired") return "Expired";
+  if (
+    [
+      "pending",
+      "pendingcheck",
+      "pendingverification",
+      "submitted",
+      "inreview",
+      "awaitingreview",
+    ].includes(rawStatus)
+  ) {
+    return "Pending check";
+  }
+  if (getBoolean(customer.isFlagged) === true) return "Flagged";
+  if (getBoolean(customer.isVerified) === true) return "Verified";
+  return "Pending check";
+};
+
 const documentTypeNames: Record<number, string> = {
   1: "Invoice",
   2: "Bank receipt",
@@ -45,7 +104,12 @@ const normalizeApplicant = (customer: AssessorItem): ApprovalApplicant => {
           typeof item === "object" && item !== null,
       )
     : [];
-  const isReturnedForRevision = customer.isReturnedForRevision === true;
+  const isReturnedForRevision =
+    normalizeApprovalStatus(customer) === "Returned for revision";
+  const rawActiveServices =
+    customer.activeServices === null || customer.activeServices === undefined
+      ? Number.NaN
+      : Number(customer.activeServices);
 
   return {
     id: String(customer.id ?? customer.customerId ?? ""),
@@ -55,20 +119,31 @@ const normalizeApplicant = (customer: AssessorItem): ApprovalApplicant => {
     importLicense: getText(customer.importLicense) || "-",
     importLicenseExpiry: getText(customer.importLicenseExpiry) || null,
     tin: getText(customer.tinNumber) || "-",
-    status: isReturnedForRevision ? "Returned for revision" : "Pending check",
+    status: normalizeApprovalStatus(customer),
     verificationNotes: getText(customer.verificationNotes) || null,
     primaryContact: getText(customer.primaryContact, customer.contactPerson) || "-",
     email: getText(customer.contactEmail) || "-",
     phone: getText(customer.contactPhone) || "-",
     address: getText(customer.businessAddress) || "-",
-    registeredDate: getText(customer.createAt) || "-",
-    activeServices: Number.isFinite(Number(customer.activeServices))
-      ? Number(customer.activeServices)
+    registeredDate:
+      getText(
+        customer.registeredDate,
+        customer.registrationDate,
+        customer.createdAt,
+        customer.createAt,
+      ) || "-",
+    activeServices: Number.isFinite(rawActiveServices)
+      ? rawActiveServices
       : null,
     isReturnedForRevision,
     checklist: documents.map((entry, index) => {
       const expiryDate = getText(entry.expiryDate) || null;
-      const isExpired = Boolean(expiryDate && new Date(expiryDate).getTime() < Date.now());
+      const isExpired =
+        getBoolean(entry.isExpired) === true ||
+        Boolean(expiryDate && new Date(expiryDate).getTime() < Date.now());
+      const documentStatus = normalizeApprovalStatus(entry);
+      const isVerified =
+        getBoolean(entry.isVerified) === true || documentStatus === "Verified";
       const rawType = entry.documentType;
       const typeCode = typeof rawType === "number" ? rawType : Number(rawType);
       const documentType =
@@ -80,11 +155,9 @@ const normalizeApplicant = (customer: AssessorItem): ApprovalApplicant => {
         documentType,
         status: isExpired
           ? "Expired"
-          : entry.isVerified === true
-            ? "Verified"
-            : "Pending check",
-        isRequired: entry.isRequired === true,
-        isVerified: entry.isVerified === true,
+          : documentStatus,
+        isRequired: getBoolean(entry.isRequired) === true,
+        isVerified,
         expiryDate,
         isExpired,
         verificationNotes: getText(entry.verificationNotes) || null,
@@ -145,12 +218,14 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   const fetchPendingCustomers = useAssessorStore((state) => state.fetchPendingCustomers);
   const approveCustomer = useAssessorStore((state) => state.approveCustomer);
   const verifyCustomerDocument = useAssessorStore((state) => state.verifyCustomerDocument);
+  const downloadCustomerDocument = useAssessorStore((state) => state.downloadCustomerDocument);
   const actionLoading = useAssessorStore((state) => state.loading);
   const dashboardData = useAssessorStore((state) => state.dashboardData);
   const fetchDashboard = useAssessorStore((state) => state.fetchDashboard);
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [documentActionId, setDocumentActionId] = useState<string | null>(null);
+  const [documentDownloadId, setDocumentDownloadId] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"All" | ApprovalStatus>("All");
@@ -201,12 +276,11 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   const counts = useMemo(() => {
     return {
       all: applicants.length,
-      pending: applicants.filter((a) =>
-        ["pending check", "pending", "in-review"].includes(a.status.toLowerCase())
-      ).length,
+      pending: applicants.filter((a) => a.status === "Pending check").length,
       returned: applicants.filter(
         (a) => a.status === "Returned for revision",
       ).length,
+      flagged: applicants.filter((a) => a.status === "Flagged").length,
     };
   }, [applicants]);
 
@@ -264,10 +338,6 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
 
     setApprovalError(null);
     setActionMessage(null);
-    if (returnForRevision && !note?.trim()) {
-      setApprovalError("A note is required when returning a customer for revision.");
-      return;
-    }
 
     try {
       await approveCustomer({
@@ -336,6 +406,39 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
       );
     } finally {
       setDocumentActionId(null);
+    }
+  };
+
+  const handleDownloadDocument = async (documentId: string, fileName: string) => {
+    const numericDocumentId = Number(documentId);
+    if (!Number.isInteger(numericDocumentId) || numericDocumentId <= 0) {
+      setApprovalError("The selected document has an invalid ID.");
+      return;
+    }
+
+    setApprovalError(null);
+    setActionMessage(null);
+    setDocumentDownloadId(documentId);
+    try {
+      const blob = await downloadCustomerDocument(numericDocumentId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName || `customer-document-${documentId}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error: unknown) {
+      setApprovalError(
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Customer document download failed.",
+      );
+    } finally {
+      setDocumentDownloadId(null);
     }
   };
 
@@ -428,7 +531,9 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
                     </h2>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      {pendingCustomersLoading ? "Loading pending approvals…" : "Importers awaiting assessment"}
+                      {pendingCustomersLoading
+                        ? "Loading customer approvals…"
+                        : "Select an importer to review"}
                     </p>
                   </div>
 
@@ -439,7 +544,14 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
               </div>
 
               <ApprovalTable
-                applicants={filteredApplicants}
+                applicants={filteredApplicants.map((applicant) => ({
+                  id: applicant.id,
+                  name: applicant.name,
+                  tin: applicant.tin,
+                  registeredDate: applicant.registeredDate,
+                  status: applicant.status,
+                  activeServices: applicant.activeServices,
+                }))}
                 selectedId={activeApplicant?.id ?? null}
                 onSelectApplicant={(id: string) => setSelectedApplicantId(id)}
                 loading={pendingCustomersLoading}
@@ -451,12 +563,15 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
           <div className="min-w-0">
             {activeApplicant ? (
               <ApprovalDetails
+                key={activeApplicant.id}
                 applicant={activeApplicant}
                 onApprove={handleApprove}
                 onRevision={handleReturn}
                 onReject={handleReject}
                 onVerifyDocument={handleVerifyDocument}
+                onDownloadDocument={handleDownloadDocument}
                 actionLoading={actionLoading}
+                documentDownloadId={documentDownloadId}
                 documentActionId={documentActionId}
               />
             ) : (

@@ -47,6 +47,13 @@ const readText = (value: unknown, fallback: string): string =>
     ? String(value).trim() || fallback
     : fallback;
 
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error && error.message.trim()
+    ? error.message
+    : typeof error === "string" && error.trim()
+      ? error
+      : fallback;
+
 const unwrapList = (value: unknown): Record<string, unknown>[] => {
   let current = value;
   const listKeys = [
@@ -204,6 +211,10 @@ const normalizeDocuments = (
     return {
       id: `${source.toLowerCase()}-${documentId || index}`,
       documentId: source === "Service" ? documentId || undefined : undefined,
+      serviceStageId:
+        readField(document, "serviceStageId", "shipmentStageId", "stageId") == null
+          ? undefined
+          : String(readField(document, "serviceStageId", "shipmentStageId", "stageId")),
       name: readText(
         readField(document, "originalFileName", "fileName", "name"),
         `Document ${index + 1}`,
@@ -260,6 +271,36 @@ const normalizeService = (record: Record<string, unknown>): ServiceCase | null =
     });
     return `${stageName} — ${stageStatus}`;
   });
+  const currentStageRecord = stages.find((stage) => {
+    const status = formatEnum(readField(stage, "status"), {
+      1: "Not started",
+      2: "Pending",
+      3: "In progress",
+      4: "Completed",
+      5: "Blocked",
+      6: "Needs review",
+    }).toLowerCase();
+    return status !== "completed" && status !== "not started";
+  });
+  const currentStageValue = currentStageRecord
+    ? readField(currentStageRecord, "stageName", "name", "title", "stage")
+    : undefined;
+  const currentStageNumber =
+    typeof currentStageValue === "number" ? currentStageValue : Number(currentStageValue);
+  const slaValue = readField(
+    record,
+    "sla",
+    "slaRemaining",
+    "slaDaysRemaining",
+    "timeToDue",
+  );
+  const slaDueDate = readField(record, "dueAt", "dueDate", "slaDueAt", "expectedCompletionDate");
+  const sla =
+    typeof slaValue === "number" || (typeof slaValue === "string" && slaValue.trim())
+      ? String(slaValue)
+      : typeof slaDueDate === "string" && Number.isFinite(new Date(slaDueDate).getTime())
+        ? `${Math.ceil((new Date(slaDueDate).getTime() - Date.now()) / 86_400_000)} day(s) ${new Date(slaDueDate).getTime() < Date.now() ? "overdue" : "left"}`
+        : "Not recorded";
   const rawServiceDocuments = readField(record, "documents");
   const customerDocuments = normalizeDocuments(
     readField(customer, "documents"),
@@ -339,6 +380,22 @@ const normalizeService = (record: Record<string, unknown>): ServiceCase | null =
     destination: destination || "Not recorded",
     countryOfOrigin: readText(readField(record, "countryOfOrigin"), "Not recorded"),
     routeCategory: readText(readField(record, "routeCategory"), "Not recorded"),
+    commodity: readText(
+      readField(record, "commodity", "goodsDescription", "cargoDescription"),
+      "Not recorded",
+    ),
+    hsCode: readText(readField(record, "hsCode", "harmonizedSystemCode"), "Not recorded"),
+    incoterm: readText(readField(record, "incoterm", "incoterms"), "Not recorded"),
+    billOfLading: readText(
+      readField(record, "billOfLading", "billOfLadingNumber", "blNumber"),
+      "Not recorded",
+    ),
+    currentStage: readText(
+      readField(record, "currentStage", "currentStageName"),
+      stageNames[currentStageNumber] ??
+        (typeof currentStageValue === "string" ? currentStageValue : "Not recorded"),
+    ),
+    sla,
     status: shipmentStatus,
     assignedHub: formatEnum(rawHub, { 1: "Djibouti", 2: "Mojo", 3: "Adama" }),
     mode: formatEnum(rawMode, { 1: "Multimodal sea/rail", 2: "Unimodal road" }),
@@ -359,9 +416,18 @@ const normalizeService = (record: Record<string, unknown>): ServiceCase | null =
 const emptyStats: ServiceReviewStats = {
   awaitingReview: 0,
   redChannel: 0,
-  withDocuments: 0,
-  unverifiedDocuments: 0,
+  submittedForReview: 0,
 };
+
+const getServiceReviewStats = (cases: ServiceCase[]): ServiceReviewStats => ({
+  awaitingReview: cases.length,
+  redChannel: cases.filter((item) => item.channel === "Red channel").length,
+  submittedForReview: cases.filter((item) =>
+    ["submitted", "under review", "pending review", "needs review"].includes(
+      item.status.toLowerCase(),
+    ),
+  ).length,
+});
 
 export const useServiceReviewStore = create<ServiceReviewStore>((set, get) => ({
   cases: [],
@@ -385,17 +451,7 @@ export const useServiceReviewStore = create<ServiceReviewStore>((set, get) => ({
       set({
         cases,
         selectedCaseId: cases[0]?.id ?? null,
-        stats: {
-          ...emptyStats,
-          awaitingReview: cases.length,
-          redChannel: cases.filter((item) => item.channel === "Red channel").length,
-          withDocuments: cases.filter((item) => item.evidenceFiles.length > 0).length,
-          unverifiedDocuments: cases.reduce(
-            (count, item) =>
-              count + item.evidenceFiles.filter((file) => !file.isVerified).length,
-            0,
-          ),
-        },
+        stats: getServiceReviewStats(cases),
         loading: false,
       });
     } catch (error: unknown) {
@@ -456,13 +512,13 @@ export const useServiceReviewStore = create<ServiceReviewStore>((set, get) => ({
           reviewedService,
           cases,
           selectedCaseId: cases[0]?.id ?? null,
-          stats: { ...state.stats, awaitingReview: cases.length },
+          stats: getServiceReviewStats(cases),
           loading: false,
         };
       });
       return reviewedService;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Service review failed.";
+      const message = getErrorMessage(error, "Service review failed.");
       set({ error: message, loading: false });
       throw error;
     }

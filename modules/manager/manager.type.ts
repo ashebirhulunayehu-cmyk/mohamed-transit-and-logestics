@@ -14,6 +14,8 @@ export interface ManagerRecentService {
   itemDescription?: string | null;
   importerName?: string | null;
   routeCategory?: string | null;
+  origin?: string | null;
+  destination?: string | null;
   declaredValue?: number | string | null;
   taxCategory?: string | null;
   countryOfOrigin?: string | null;
@@ -25,6 +27,10 @@ export interface ManagerRecentService {
   assignedAssessorId?: number | string | null;
   registeredDate?: string | null;
   lastUpdateDate?: string | null;
+  eta?: string | null;
+  dueAt?: string | null;
+  requiresCustomerAction?: boolean;
+  isBlocked?: boolean;
   [key: string]: unknown;
 }
 
@@ -34,7 +40,9 @@ export interface ManagerAssignedUserSummary {
   email?: string | null;
   firstName?: string | null;
   lastName?: string | null;
+  businessName?: string | null;
   profilePhoto?: string | null;
+  phone?: string | null;
 }
 
 export interface ManagerStaff extends ManagerAssignedUserSummary {
@@ -42,6 +50,11 @@ export interface ManagerStaff extends ManagerAssignedUserSummary {
   phone?: string | null;
   isAccountLocked?: boolean;
   accountStatus?: number | string | null;
+  roleIds?: number[];
+  roleNames?: string[];
+  branchName?: string | null;
+  openCases?: number | null;
+  availability?: string | null;
 }
 
 export interface ManagerExecutorAssignmentRequest {
@@ -50,9 +63,10 @@ export interface ManagerExecutorAssignmentRequest {
 
 export interface ManagerExecutorAssignment extends ManagerRecentService {
   trackingNumber: string;
-  importerId: number | string;
+  importerId?: number | string;
   importer: ManagerAssignedUserSummary | null;
   description: string;
+  mode?: number | string | null;
   status: number | string;
   createdByUser: ManagerAssignedUserSummary | null;
   assignedCaseExecutorId: number | string | null;
@@ -88,9 +102,39 @@ export interface ManagerServiceMessage {
   recordStatus: number;
 }
 
+export interface ManagerServiceStage {
+  id?: number | string;
+  stageName?: string | null;
+  name?: string | null;
+  status?: number | string | null;
+  stageStatus?: number | string | null;
+  currentStatus?: number | string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  completedAt?: string | null;
+  notes?: string | null;
+  comments?: string | null;
+}
+
+export interface ManagerServiceDocument {
+  id?: number | string;
+  stageId?: number | string | null;
+  fileName?: string | null;
+  originalFileName?: string | null;
+  fileExtension?: string | null;
+  mimeType?: string | null;
+  documentType?: number | string | null;
+  description?: string | null;
+  isRequired?: boolean;
+  isVerified?: boolean;
+  verificationNotes?: string | null;
+  fileSizeBytes?: number | null;
+  createAt?: string | null;
+}
+
 export interface ManagerServiceDetail extends ManagerExecutorAssignment {
-  stages: unknown[];
-  documents: unknown[];
+  stages: ManagerServiceStage[];
+  documents: ManagerServiceDocument[];
   messages: ManagerServiceMessage[];
 }
 

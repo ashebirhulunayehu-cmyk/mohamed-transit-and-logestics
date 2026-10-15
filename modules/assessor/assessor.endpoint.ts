@@ -5,7 +5,11 @@ import type {
   AssessorComplianceFeedbackRequest,
   AssessorReviewedService,
   AssessorServiceReviewRequest,
+  AddStageDiscussionRequest,
   CustomerApprovalResult,
+  EscalateServiceRequest,
+  NotifyImporterRequest,
+  RecordAssessmentRequest,
   VerifyCustomerDocumentRequest,
 } from "./assessor.type";
 
@@ -17,6 +21,16 @@ export const AssessorEndpoints = {
   // 1B. Pending Services
   getPendingServices: () =>
     service.get(API_ROUTES.assessor.getPendingServiceReviews),
+  getServiceDetails: (serviceId: number | string) =>
+    service.get(API_ROUTES.assessor.getServiceDetails(serviceId)),
+  getConsignmentDetails: (serviceId: number | string) =>
+    service.get(API_ROUTES.assessor.getConsignmentDetails(serviceId)),
+  getServiceStages: (serviceId: number | string) =>
+    service.get(API_ROUTES.assessor.getServiceStages(serviceId)),
+  getStageDiscussions: (serviceId: number | string, stageId: number | string) =>
+    service.get(API_ROUTES.assessor.getStageDiscussions(serviceId, stageId)),
+  addStageDiscussion: (payload: AddStageDiscussionRequest) =>
+    service.post(API_ROUTES.assessor.addStageDiscussion, payload),
 
   // 2. Approve Customer
   approveCustomer: async (
@@ -25,10 +39,19 @@ export const AssessorEndpoints = {
     (await service.put(API_ROUTES.assessor.approveCustomer, data)) as unknown as CustomerApprovalResult,
   verifyCustomerDocument: (data: VerifyCustomerDocumentRequest) =>
     service.put(API_ROUTES.assessor.verifyCustomerDocument, data),
+  downloadCustomerDocument: (documentId: number) =>
+    service.get(API_ROUTES.assessor.downloadCustomerDocument, {
+      params: { documentId },
+      responseType: "blob",
+    }),
 
   // 3. Pending Service Reviews
   getPendingServiceReviews: () =>
     service.get(API_ROUTES.assessor.getPendingServiceReviews),
+  getAssessmentDocuments: () =>
+    service.get(API_ROUTES.assessor.getAssessmentDocuments),
+  recordAssessment: (payload: RecordAssessmentRequest) =>
+    service.post(API_ROUTES.assessor.recordAssessment, payload),
 
   // GET /api/v1/Document/GetServiceDocuments?serviceId={id}
   getServiceDocuments: (serviceId: number | string) =>
@@ -61,6 +84,10 @@ export const AssessorEndpoints = {
   // 4. Review Service
   reviewService: async (data: AssessorServiceReviewRequest): Promise<AssessorReviewedService> =>
     (await service.put(API_ROUTES.assessor.reviewService, data)) as unknown as AssessorReviewedService,
+  escalateService: (data: EscalateServiceRequest) =>
+    service.post(API_ROUTES.assessor.escalateService, data),
+  notifyImporter: (data: NotifyImporterRequest) =>
+    service.post(API_ROUTES.assessor.notifyImporter, data),
 
   // 5. Services Under Oversight
   getServicesUnderOversight: (params?: Record<string, unknown>) =>

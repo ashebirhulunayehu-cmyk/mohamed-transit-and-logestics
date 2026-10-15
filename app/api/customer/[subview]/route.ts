@@ -1,6 +1,10 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { normalizeApiBaseUrl } from "@/modules/utils/axios/config";
+import {
+  CustomerContextError,
+  getCustomerAccessToken,
+  getCustomerRequestContext,
+} from "../_shared";
 
 const BACKEND_PATHS = {
   profile: "/Customer/GetProfile",
@@ -38,16 +42,6 @@ const normalizeBooleanFlags = (value: unknown): unknown => {
   );
 };
 
-const getAccessToken = async (): Promise<string | null> => {
-  const cookieStore = await cookies();
-  return (
-    cookieStore.get("accessToken")?.value ??
-    cookieStore.get("transit-portal-accessToken")?.value ??
-    cookieStore.get("MohamedTransit-portal-accessToken")?.value ??
-    null
-  );
-};
-
 const proxyRequest = async (
   request: Request,
   subview: string,
@@ -56,20 +50,23 @@ const proxyRequest = async (
     return NextResponse.json({ error: "Unknown customer dashboard view." }, { status: 404 });
   }
 
-  const accessToken = await getAccessToken();
+  const accessToken = await getCustomerAccessToken();
   if (!accessToken) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const customerUserId =
-    process.env.CUSTOMER_SIDEBAR_USER_ID ??
-    (process.env.NODE_ENV === "development" ? "3" : "");
-  if (subview !== "profile" && !/^\d+$/.test(customerUserId)) {
-    return NextResponse.json(
-      { error: "The authenticated customer ID is not configured." },
-      { status: 500 },
-    );
+  let context: Awaited<ReturnType<typeof getCustomerRequestContext>> | null = null;
+  try {
+    if (subview === "shipments" || subview === "stages") {
+      context = await getCustomerRequestContext();
+    }
+  } catch (error: unknown) {
+    if (error instanceof CustomerContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
   }
+  const customerUserId = context?.customerUserId;
 
   const backendPath =
     subview === "shipments"
@@ -85,10 +82,99 @@ const proxyRequest = async (
     );
   }
 
-  const backendBase = normalizeApiBaseUrl(
-    process.env.BACKEND_API_URL ?? process.env.NEXT_PUBLIC_API_URL,
-  );
+  const backendBase =
+    context?.backendUrl ??
+    normalizeApiBaseUrl(
+      process.env.BACKEND_API_URL ?? process.env.NEXT_PUBLIC_API_URL,
+    );
   const incomingUrl = new URL(request.url);
+  if (subview === "stages") {
+    const requestedIds = incomingUrl.searchParams.get("shipmentIds");
+    if (!requestedIds) {
+      return NextResponse.json([], { headers: { "Cache-Control": "no-store" } });
+    }
+
+    const shipmentIds = [...new Set(requestedIds.split(",").map((id) => id.trim()))];
+    if (
+      shipmentIds.length > 100 ||
+      shipmentIds.some((id) => !/^[1-9]\d*$/.test(id))
+    ) {
+      return NextResponse.json(
+        { error: "Valid shipment IDs are required to load milestones." },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      };
+      const shipmentResponse = await fetch(
+        `${backendBase}/Shipments/GetByImporter/${customerUserId}`,
+        {
+          headers,
+          cache: "no-store",
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
+      if (!shipmentResponse.ok) {
+        return NextResponse.json(
+          { error: `Unable to validate customer shipments (status ${shipmentResponse.status}).` },
+          { status: shipmentResponse.status },
+        );
+      }
+      const shipmentRows = extractRows(await shipmentResponse.json());
+      const ownedIds = new Set(
+        shipmentRows
+          .map((shipment) => fieldValue(shipment, "id", "shipmentId"))
+          .filter((id): id is string | number => typeof id === "string" || typeof id === "number")
+          .map(String),
+      );
+      if (shipmentIds.some((id) => !ownedIds.has(id))) {
+        return NextResponse.json(
+          { error: "Milestones can only be loaded for your own shipments." },
+          { status: 403 },
+        );
+      }
+
+      const stageResponses = await Promise.all(
+        shipmentIds.map((shipmentId) =>
+          fetch(
+            `${backendBase}/Shipments/GetStages?shipmentId=${encodeURIComponent(shipmentId)}`,
+            {
+              headers,
+              cache: "no-store",
+              signal: AbortSignal.timeout(15_000),
+            },
+          ),
+        ),
+      );
+      const failedResponse = stageResponses.find((response) => !response.ok);
+      if (failedResponse) {
+        return NextResponse.json(
+          { error: `Unable to load shipment milestones (status ${failedResponse.status}).` },
+          { status: failedResponse.status },
+        );
+      }
+
+      const stageRows = await Promise.all(
+        stageResponses.map((response) => response.json().then(extractRows)),
+      );
+      return NextResponse.json(stageRows.flat().map(normalizeBooleanFlags), {
+        headers: { "Cache-Control": "no-store" },
+      });
+    } catch (error: unknown) {
+      if (error instanceof CustomerContextError) {
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
+      console.error("Customer stages proxy request failed:", error);
+      return NextResponse.json(
+        { error: "Unable to reach the backend for shipment milestones." },
+        { status: 502 },
+      );
+    }
+  }
   const isDocumentDownload =
     subview === "documents" && incomingUrl.searchParams.has("downloadId");
   const backendUrl = new URL(
@@ -150,12 +236,47 @@ const proxyRequest = async (
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error: unknown) {
+    if (error instanceof CustomerContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error(`Customer ${subview} proxy request failed:`, error);
     return NextResponse.json(
       { error: `Unable to reach the backend for ${subview}.` },
       { status: 502 },
     );
   }
+};
+
+const fieldValue = (
+  record: Record<string, unknown>,
+  ...names: string[]
+): unknown => {
+  const key = Object.keys(record).find((candidate) =>
+    names.some((name) => candidate.toLowerCase() === name.toLowerCase()),
+  );
+  return key ? record[key] : undefined;
+};
+
+const extractRows = (value: unknown): Record<string, unknown>[] => {
+  let candidate = value;
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (Array.isArray(candidate)) {
+      if (!candidate.every(isRecord)) {
+        throw new Error("The backend returned an invalid list.");
+      }
+      return candidate;
+    }
+    if (!isRecord(candidate)) break;
+    candidate =
+      candidate.data ??
+      candidate.payload ??
+      candidate.response ??
+      candidate.result ??
+      candidate.items ??
+      candidate.records;
+  }
+  if (candidate === null || candidate === undefined) return [];
+  throw new Error("The backend response did not contain a list.");
 };
 
 type RouteContext = { params: Promise<{ subview: string }> };

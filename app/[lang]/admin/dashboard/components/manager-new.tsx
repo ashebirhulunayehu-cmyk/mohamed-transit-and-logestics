@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 
 const stats = [
   {
@@ -156,7 +156,6 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
 }
 
 export default function ManagerDashboardPage() {
-  const pathname = usePathname();
   const params = useParams();
   const lang = (params.lang as string) || 'en';
 

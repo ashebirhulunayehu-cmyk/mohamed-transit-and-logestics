@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Mail, MapPin, Phone, UserRound, Lock, Eye, EyeOff, CheckCircle2 } from "lucide-react";
@@ -10,7 +11,10 @@ import { z } from "zod";
 import { CustomerPageHeader } from "@/features/customer/components/CustomerPageHeader";
 import useAuthStore, { hasCustomerAccount } from "@/modules/auth/auth.store";
 import { useCustomerServiceStore } from "@/modules/customer/customer.store";
-import { updateCustomerProfile } from "@/modules/customer/customer.endpoint";
+import {
+  getCustomerAccountProfile,
+  updateCustomerProfile,
+} from "@/modules/customer/customer.endpoint";
 
 // Validation Schema for Password Update
 const changePasswordSchema = z
@@ -40,6 +44,47 @@ const editProfileSchema = z.object({
 
 type EditProfileFormData = z.infer<typeof editProfileSchema>;
 
+type AccountProfile = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is AccountProfile =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const unwrapAccountProfile = (value: unknown): AccountProfile => {
+  let current = value;
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (!isRecord(current)) {
+      throw new Error("The Account/GetProfile response did not contain a profile record.");
+    }
+    const profile = current.profile ?? current.user ?? current.account;
+    if (isRecord(profile)) {
+      current = profile;
+      continue;
+    }
+    const wrapper = current.data ?? current.payload ?? current.response ?? current.result;
+    if (wrapper !== undefined && wrapper !== current) {
+      current = wrapper;
+      continue;
+    }
+    return current;
+  }
+  throw new Error("The Account/GetProfile response nesting is invalid.");
+};
+
+const readProfileText = (
+  profile: AccountProfile | null,
+  ...keys: string[]
+): string => {
+  if (!profile) return "";
+  const value = keys
+    .map((key) => profile[key])
+    .find(
+      (candidate) =>
+        (typeof candidate === "string" || typeof candidate === "number") &&
+        String(candidate).trim(),
+    );
+  return value === undefined ? "" : String(value).trim();
+};
+
 export default function CustomerProfilePage() {
   const { lang = "am" } = useParams<{ lang: string }>();
   const isAm = lang === "am";
@@ -47,6 +92,8 @@ export default function CustomerProfilePage() {
   const { user, updatePassword, loading } = useAuthStore();
   const shouldLoadCustomerProfile = hasCustomerAccount(user);
   const { profile, getCustomerProfile } = useCustomerServiceStore();
+  const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
+  const [accountProfileError, setAccountProfileError] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
@@ -56,8 +103,57 @@ export default function CustomerProfilePage() {
     if (shouldLoadCustomerProfile) void getCustomerProfile();
   }, [getCustomerProfile, shouldLoadCustomerProfile]);
 
-  const profileName = user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : user?.username || "Customer";
-  const profilePhoto = user?.profilePhoto || "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80";
+  useEffect(() => {
+    if (!shouldLoadCustomerProfile) return;
+
+    let active = true;
+    void getCustomerAccountProfile()
+      .then((response) => {
+        if (active) {
+          setAccountProfile(unwrapAccountProfile(response));
+          setAccountProfileError(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setAccountProfileError(
+          error instanceof Error
+            ? error.message
+            : isAm
+              ? "የመለያ ፕሮፋይሉን መጫን አልተቻለም።"
+              : "Unable to load your account profile.",
+        );
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAm, shouldLoadCustomerProfile]);
+
+  const accountFirstName = readProfileText(accountProfile, "firstName", "FirstName");
+  const accountLastName = readProfileText(accountProfile, "lastName", "LastName");
+  const accountFullName = readProfileText(accountProfile, "fullName", "FullName", "name", "Name");
+  const profileName =
+    accountFullName ||
+    [accountFirstName || user?.firstName, accountLastName || user?.lastName]
+      .filter(Boolean)
+      .join(" ") ||
+    user?.username ||
+    "Customer";
+  const profilePhoto =
+    readProfileText(
+      accountProfile,
+      "profilePictureUrl",
+      "ProfilePictureUrl",
+      "profilePhotoUrl",
+      "ProfilePhotoUrl",
+      "profilePhoto",
+      "ProfilePhoto",
+      "avatarUrl",
+      "AvatarUrl",
+    ) ||
+    user?.profilePhoto ||
+    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80";
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -88,11 +184,11 @@ export default function CustomerProfilePage() {
 
   useEffect(() => {
     resetProfile({
-      contactPerson: profile?.contactPerson || [user?.firstName, user?.lastName].filter(Boolean).join(" "),
-      contactEmail: profile?.contactEmail || user?.email || "",
-      contactPhone: profile?.contactPhone || user?.phone || user?.phoneNumber || "",
+      contactPerson: profile?.contactPerson || profileName,
+      contactEmail: profile?.contactEmail || readProfileText(accountProfile, "email", "Email") || user?.email || "",
+      contactPhone: profile?.contactPhone || readProfileText(accountProfile, "phone", "phoneNumber", "Phone", "PhoneNumber") || user?.phone || user?.phoneNumber || "",
     });
-  }, [profile, resetProfile, user]);
+  }, [accountProfile, profile, profileName, resetProfile, user]);
 
   const onProfileSubmit = async (data: EditProfileFormData) => {
     setProfileSaveError(null);
@@ -130,8 +226,8 @@ export default function CustomerProfilePage() {
   };
 
   const displayedContactPerson = savedContact?.contactPerson || profile?.contactPerson || profileName;
-  const displayedContactEmail = savedContact?.contactEmail || profile?.contactEmail || user?.email || "";
-  const displayedContactPhone = savedContact?.contactPhone || profile?.contactPhone || user?.phone || "";
+  const displayedContactEmail = savedContact?.contactEmail || profile?.contactEmail || readProfileText(accountProfile, "email", "Email") || user?.email || "";
+  const displayedContactPhone = savedContact?.contactPhone || profile?.contactPhone || readProfileText(accountProfile, "phone", "phoneNumber", "Phone", "PhoneNumber") || user?.phone || user?.phoneNumber || "";
 
   const onSubmit = async (data: ChangePasswordFormData) => {
     setErrorMessage(null);
@@ -171,7 +267,17 @@ export default function CustomerProfilePage() {
           <div className="flex items-center gap-4 border-b border-slate-200 p-5">
             <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded bg-blue-100 text-blue-700 font-bold text-lg">
               {user?.profilePhoto || user?.firstName ? (
-                <img src={profilePhoto} alt={profileName} className="h-full w-full object-cover" />
+                <Image
+                  src={profilePhoto}
+                  alt={profileName}
+                  width={56}
+                  height={56}
+                  unoptimized
+                  onError={(event) => {
+                    event.currentTarget.style.display = "none";
+                  }}
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 <UserRound className="h-7 w-7" />
               )}
@@ -181,7 +287,7 @@ export default function CustomerProfilePage() {
                 {displayedContactPerson}
               </h2>
               <p className="text-xs text-slate-500">
-                {isAm ? "ደንበኛ / አስመጪ" : "Customer / Importer"} · {profile?.userId ?? user?.id ?? "—"}
+                {isAm ? "ደንበኛ / አስመጪ" : "Customer / Importer"} · {profile?.userId ?? (readProfileText(accountProfile, "userId", "UserId", "id", "Id", "accountId", "AccountId") || user?.id || "—")}
               </p>
             </div>
           </div>
@@ -194,6 +300,11 @@ export default function CustomerProfilePage() {
           {profileSaveError && (
             <p className="mx-5 mt-4 rounded border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800" role="alert">
               {profileSaveError}
+            </p>
+          )}
+          {accountProfileError && (
+            <p className="mx-5 mt-4 rounded border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800" role="alert">
+              {accountProfileError}
             </p>
           )}
 

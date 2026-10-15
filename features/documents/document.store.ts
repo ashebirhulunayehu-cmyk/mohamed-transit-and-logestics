@@ -3,6 +3,8 @@
 import { create } from "zustand";
 import { DocumentRecord, DocumentFiltersState } from "./document.types";
 import { DataEncoderEndpoints } from "@/modules/dataencoder/data-encoder.endpoint";
+import { AssessorEndpoints } from "@/modules/assessor/assessor.endpoint";
+import { useAuthStore } from "@/modules/auth/auth.store";
 import {
   deleteDocument,
   deleteStageTransportDocument,
@@ -32,6 +34,10 @@ const normalizeDocumentRecord = (value: unknown): DocumentRecord | null => {
     ? documentTypes[numericType] || "Document"
     : rawType ?? "Document";
   const serviceId = readField("serviceId", "shipmentId", "serviceNumber") ?? "N/A";
+  const serviceValue = readField("service");
+  const service = isRecord(serviceValue) ? serviceValue : {};
+  const trackingNumber = readField("trackingNumber", "serviceTrackingNumber") ??
+    service.trackingNumber;
   const serviceStage = readField("serviceStage", "shipmentStageId", "stageName", "stage") ?? "General";
   const uploader = readField("uploadedByUser", "uploadedBy", "createdBy", "userName");
   const uploadedBy = isRecord(uploader)
@@ -39,23 +45,53 @@ const normalizeDocumentRecord = (value: unknown): DocumentRecord | null => {
     : uploader ?? (readField("uploadedByUserId") ? `User ${String(readField("uploadedByUserId"))}` : "Unavailable");
   const uploadedAt = readField("uploadedAt", "createdAt", "createAt", "uploadDate", "dateUploaded") ?? "Date unavailable";
   const statusValue = String(readField("status", "verificationStatus", "state") ?? "").trim().toLowerCase();
-  const status = readField("isVerified") === true || ["verified", "approved"].includes(statusValue)
+  const verificationNotes = readField("verificationNotes", "reviewNotes", "notes");
+  const normalizedNotes = typeof verificationNotes === "string" ? verificationNotes.trim().toLowerCase() : "";
+  const status = ["verified", "approved"].includes(statusValue) || readField("isVerified") === true
     ? "Verified"
-    : readField("isFlagged") === true || ["flagged", "needs review"].includes(statusValue)
+    : ["flagged", "needs review"].includes(statusValue) ||
+      readField("isFlagged") === true ||
+      normalizedNotes.startsWith("flagged:")
       ? "Flagged"
-      : ["rejected", "declined"].includes(statusValue)
+      : ["rejected", "declined"].includes(statusValue) || normalizedNotes.startsWith("rejected:")
         ? "Rejected"
         : "Pending check";
+  const rawHistory = readField("history", "auditHistory", "verificationHistory", "documentHistory");
+  const history = Array.isArray(rawHistory)
+    ? rawHistory.flatMap((entry): string[] => {
+        if (typeof entry === "string" && entry.trim()) return [entry.trim()];
+        if (!isRecord(entry)) return [];
+        const parts = [
+          entry.action,
+          entry.description,
+          entry.status,
+          entry.actor,
+          entry.userName,
+          entry.createdAt,
+          entry.createAt,
+        ].filter((part): part is string | number => typeof part === "string" || typeof part === "number");
+        return parts.length ? [parts.map(String).join(" · ")] : [];
+      })
+    : undefined;
+  const checksum = readField("checksum", "fileChecksum", "hash");
+  const accessRestriction = readField("accessRestriction", "accessLevel", "access");
+  const virusScanStatus = readField("virusScanStatus", "scanStatus", "virusScanResult");
 
   return {
     id,
     name: String(fileName),
     type: String(type),
     serviceId: String(serviceId),
+    ...(trackingNumber == null ? {} : { serviceTrackingNumber: String(trackingNumber) }),
     serviceStage: String(serviceStage),
     uploadedBy: String(uploadedBy),
     uploadedAt: String(uploadedAt),
     status,
+    ...(typeof checksum === "string" ? { checksum } : {}),
+    ...(typeof accessRestriction === "string" ? { accessRestriction } : {}),
+    ...(typeof virusScanStatus === "string" ? { virusScanStatus } : {}),
+    ...(history ? { history } : {}),
+    ...(typeof verificationNotes === "string" ? { verificationNotes } : {}),
   };
 };
 
@@ -64,6 +100,7 @@ interface DocumentStore extends DocumentFiltersState {
   loading: boolean;
   error: string | null;
   fetchDocuments: (params?: Record<string, unknown>) => Promise<void>;
+  fetchAssessmentDocuments: () => Promise<void>;
   fetchDocumentsForServices: (serviceIds: Array<string | number>) => Promise<void>;
   uploadDocument: (payload: FormData) => Promise<void>;
   verifyDocumentById: (payload: {
@@ -135,6 +172,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   error: null,
 
   fetchDocuments: async (params) => {
+    const serviceIdEntry = Object.entries(params ?? {}).find(
+      ([key]) => key.toLowerCase() === "serviceid",
+    );
+    const serviceId = Number(serviceIdEntry?.[1]);
+    if (!Number.isInteger(serviceId) || serviceId <= 0) {
+      set({
+        error: "A valid service ID is required to load service documents.",
+        loading: false,
+      });
+      return;
+    }
+
     set({ loading: true, error: null });
     try {
       const response = await getServiceDocuments(params);
@@ -149,6 +198,23 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     } catch (err: unknown) {
       set({
         error: getErrorMessage(err, "Failed to load documents"),
+        loading: false,
+      });
+    }
+  },
+
+  fetchAssessmentDocuments: async () => {
+    set({ loading: true, error: null });
+    try {
+      const response = await AssessorEndpoints.getAssessmentDocuments();
+      const documents = readDocumentRows(response)
+        .map((item) => normalizeDocumentRecord(item))
+        .filter((item): item is DocumentRecord => item !== null);
+
+      set({ documents, loading: false, error: null });
+    } catch (err: unknown) {
+      set({
+        error: getErrorMessage(err, "Failed to load assessment documents"),
         loading: false,
       });
     }
@@ -203,18 +269,43 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   verifyDocumentById: async (payload) => {
+    const requestedId = payload.documentId ?? payload.id;
+    const documentId = Number(requestedId);
+    if (!Number.isSafeInteger(documentId) || documentId <= 0) {
+      throw new Error("A valid numeric document ID is required for verification.");
+    }
+    const verifiedByUserId = Number(
+      payload.verifiedByUserId ?? useAuthStore.getState().user?.id,
+    );
+    if (!Number.isSafeInteger(verifiedByUserId) || verifiedByUserId <= 0) {
+      throw new Error("Your account ID is unavailable. Sign in again before verifying documents.");
+    }
+
     set({ loading: true, error: null });
     try {
-      const documentId = payload.documentId ?? payload.id;
+      const verificationNotes = payload.verificationNotes ?? payload.notes ?? "Verified by assessor";
       await verifyDocument({
         documentId,
-        id: payload.id,
         isVerified: payload.isVerified ?? true,
-        notes: payload.notes ?? payload.verificationNotes ?? "Verified by user",
-        verificationNotes: payload.verificationNotes ?? payload.notes ?? "Verified by user",
-        verifiedByUserId: payload.verifiedByUserId,
+        verificationNotes,
+        verifiedByUserId,
       });
-      await refreshCurrentDocuments(get);
+      const id = String(documentId);
+      const notes = verificationNotes.trim().toLowerCase();
+      const status: DocumentRecord["status"] = payload.isVerified ?? true
+        ? "Verified"
+        : notes.startsWith("flagged:")
+          ? "Flagged"
+          : notes.startsWith("rejected:")
+            ? "Rejected"
+            : "Pending check";
+      set((state) => ({
+        documents: state.documents.map((document) =>
+          document.id === id ? { ...document, status, verificationNotes } : document,
+        ),
+        loading: false,
+      }));
+      await get().fetchAssessmentDocuments();
     } catch (err: unknown) {
       set({
         error: getErrorMessage(err, "Verification failed"),

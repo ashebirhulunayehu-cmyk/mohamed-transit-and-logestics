@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -85,7 +86,7 @@ const groups = [
   },
   {
     label: "Communication",
-    items: [["Notifications", "/customer/notifications", Bell], ["Messages", "/customer/messages", MessageSquare],     ["Contact Us", "/customer/dashboard?view=support-requests", CircleHelp]],
+  items: [["Notifications", "/customer/notifications", Bell], ["Messages", "/customer/messages", MessageSquare], ["Contact Us", "/customer/dashboard?view=support-requests", CircleHelp]],
   },
   { label: "Account", items: [["Profile", "/customer/profile", UserRound]] },
 ] as const;
@@ -153,9 +154,13 @@ export function CustomerShell({ children }: { children: ReactNode }) {
     user?.username ||
     user?.email ||
     "Customer";
-  const profilePhoto =
-    user?.profilePhoto ||
-    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80";
+  const profilePhoto = user?.profilePhoto || "";
+  const accountInitials = accountName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
   const accountRole = readAccountRole(user);
   const matchingSearchTargets = customerSearchTargets.filter((target) =>
     target.label.toLowerCase().includes(searchQuery.trim().toLowerCase()),
@@ -408,8 +413,21 @@ export function CustomerShell({ children }: { children: ReactNode }) {
             </button>
             <div className="hidden h-7 w-px bg-slate-200 sm:block" />
             <div className="flex items-center gap-2 rounded-lg px-1.5 py-1.5">
-              <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-blue-100 text-xs font-bold text-blue-700">
-                <img src={profilePhoto} alt={accountName} className="h-full w-full object-cover" />
+              <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+                <span aria-hidden="true">{accountInitials}</span>
+                {profilePhoto && (
+                  <Image
+                    src={profilePhoto}
+                    alt={accountName}
+                    width={32}
+                    height={32}
+                    unoptimized
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                    }}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                )}
               </div>
               <div className="hidden text-left sm:block">
                 <p className="max-w-[120px] truncate text-xs font-semibold text-slate-900">{accountName}</p>

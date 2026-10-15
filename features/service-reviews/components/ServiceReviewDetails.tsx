@@ -44,6 +44,25 @@ export function ServiceReviewDetails() {
     fetchedDocuments ??
     selectedCase.evidenceFiles.filter((file) => file.source === "Service");
   const evidenceFiles = [...customerDocuments, ...serviceDocuments];
+  const statusClass = selectedCase.status.toLowerCase().includes("block")
+    ? "border-rose-200 bg-rose-50 text-rose-800"
+    : selectedCase.status.toLowerCase().includes("customer action") ||
+        selectedCase.status.toLowerCase().includes("attention")
+      ? "border-amber-200 bg-amber-50 text-amber-800"
+      : selectedCase.status.toLowerCase().includes("approv") ||
+          selectedCase.status.toLowerCase().includes("complete")
+        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+        : "border-blue-200 bg-blue-50 text-blue-800";
+  const channelClass =
+    selectedCase.channel === "Red channel"
+      ? "border-rose-200 bg-rose-50 text-rose-800"
+      : selectedCase.channel === "Yellow channel"
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : selectedCase.channel === "Green channel"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+          : selectedCase.channel === "Blue channel"
+            ? "border-blue-200 bg-blue-50 text-blue-800"
+            : "border-slate-200 bg-slate-50 text-slate-700";
 
   return (
     <div className="space-y-6 rounded-xl border border-slate-200/80 bg-white p-6 shadow-sm">
@@ -51,20 +70,20 @@ export function ServiceReviewDetails() {
         <div className="min-w-0">
           <h2 className="text-lg font-bold text-slate-900">{selectedCase.title}</h2>
           <p className="mt-1 text-xs text-slate-500">
-            Shipment #{selectedCase.shipmentId} · {selectedCase.trackingNumber}
+            {selectedCase.trackingNumber} · {selectedCase.route}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="rounded border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+            <span className={`rounded border px-2.5 py-0.5 text-xs font-medium ${statusClass}`}>
               {selectedCase.status}
             </span>
-            <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+            <span className={`inline-flex items-center gap-1 rounded border px-2.5 py-0.5 text-xs font-medium ${channelClass}`}>
               <ShieldAlert className="h-3 w-3" />
               {selectedCase.channel}
             </span>
           </div>
         </div>
         <Link
-          href={`/${lang}/admin/assessor/service-reviews/${selectedCase.id}`}
+          href={`/${lang}/admin/assessor/services/${selectedCase.shipmentId}`}
           className="flex shrink-0 items-center gap-2 rounded border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
         >
           Open case
@@ -72,61 +91,19 @@ export function ServiceReviewDetails() {
         </Link>
       </div>
 
-      <section>
-        <h3 className="mb-3 text-sm font-bold text-slate-900">Importer / customer</h3>
-        <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-          <Detail label="Business name" value={selectedCase.businessName} />
-          <Detail label="TIN" value={selectedCase.tinNumber} />
-          <Detail label="Business type" value={selectedCase.businessType} />
-          <Detail label="Customer approval" value={
-            selectedCase.customerIsVerified === null
-              ? "Not recorded"
-              : selectedCase.customerIsVerified ? "Verified" : "Not verified"
-          } />
-          <Detail label="Business license" value={selectedCase.businessLicense} />
-          <Detail label="Import license" value={selectedCase.importLicense} />
-          <Detail label="Import license expiry" value={selectedCase.importLicenseExpiry} />
-          <Detail label="Business address" value={selectedCase.businessAddress} />
-          <Detail label="Contact person" value={selectedCase.contactPerson} />
-          <Detail label="Email" value={selectedCase.contactEmail} />
-          <Detail label="Phone" value={selectedCase.contactPhone} />
-        </div>
-      </section>
-
-      <section className="border-t border-slate-100 pt-5">
-        <h3 className="mb-3 text-sm font-bold text-slate-900">Shipment / consignment</h3>
-        <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-          <Detail label="Description" value={selectedCase.title} />
-          <Detail label="Transport mode" value={selectedCase.mode} />
-          <Detail label="Assigned hub" value={selectedCase.assignedHub} />
-          <Detail label="Route category" value={selectedCase.routeCategory} />
-          <Detail label="Origin" value={selectedCase.origin} />
-          <Detail label="Destination" value={selectedCase.destination} />
-          <Detail label="Country of origin" value={selectedCase.countryOfOrigin} />
-          <Detail label="Registered" value={selectedCase.registeredDate} />
-          <Detail label="Recorded declared value" value={selectedCase.declaredValue} />
-          <Detail label="Tax category" value={selectedCase.taxCategory} />
-          <Detail label="Risk level" value={selectedCase.riskLevel} />
+      <section aria-label="Service review summary">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+          <Detail label="Importer" value={selectedCase.importer} />
+          <Detail label="Mode" value={selectedCase.mode} />
+          <Detail label="Commodity" value={selectedCase.commodity} />
+          <Detail label="HS code" value={selectedCase.hsCode} />
+          <Detail label="Declared value" value={selectedCase.declaredValue} />
+          <Detail label="Incoterm" value={selectedCase.incoterm} />
+          <Detail label="Bill of lading" value={selectedCase.billOfLading} />
           <Detail label="Case executor" value={selectedCase.caseExecutor} />
-        </div>
-        <p className="mt-3 text-xs text-slate-500">
-          Declared value is the value recorded in the system; it is not an independently verified customs valuation.
-        </p>
-      </section>
-
-      <section className="border-t border-slate-100 pt-5">
-        <h3 className="mb-3 text-sm font-bold text-slate-900">Recorded shipment stages</h3>
-        {selectedCase.stages.length ? (
-          <ul className="space-y-2">
-            {selectedCase.stages.map((stage, index) => (
-              <li key={`${stage}-${index}`} className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                {stage}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-slate-500">No shipment stages were returned by the API.</p>
-        )}
+          <Detail label="Current stage" value={selectedCase.currentStage} />
+          <Detail label="SLA" value={selectedCase.sla} />
+        </dl>
       </section>
 
       <StageEvidence
@@ -134,7 +111,11 @@ export function ServiceReviewDetails() {
         loading={documentsLoading}
         error={documentsError}
       />
-      <AssessmentDecision shipmentId={selectedCase.shipmentId} />
+      <AssessmentDecision
+        key={selectedCase.shipmentId}
+        shipmentId={selectedCase.shipmentId}
+        serviceStatus={selectedCase.status}
+      />
     </div>
   );
 }
@@ -142,8 +123,8 @@ export function ServiceReviewDetails() {
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <span className="block text-xs text-slate-400">{label}</span>
-      <span className="break-words font-medium text-slate-800">{displayValue(value)}</span>
+      <dt className="text-xs text-slate-400">{label}</dt>
+      <dd className="min-w-0 break-words font-medium text-slate-800">{displayValue(value)}</dd>
     </div>
   );
 }

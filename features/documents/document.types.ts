@@ -5,10 +5,16 @@ export interface DocumentRecord {
   name: string;
   type: string;
   serviceId: string;
+  serviceTrackingNumber?: string;
   serviceStage: string;
   uploadedBy: string;
   uploadedAt: string;
   status: VerificationStatus;
+  checksum?: string;
+  accessRestriction?: string;
+  virusScanStatus?: string;
+  history?: string[];
+  verificationNotes?: string;
 }
 
 export interface DocumentFiltersState {

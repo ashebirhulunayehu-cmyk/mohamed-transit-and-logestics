@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { normalizeApiBaseUrl } from "@/modules/utils/axios/config";
+import { CustomerContextError, getCustomerRequestContext } from "../_shared";
 
 type BackendRecord = Record<string, unknown>;
 
@@ -182,120 +181,94 @@ const countActiveShipments = (shipments: BackendRecord[]): number =>
   }).length;
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const accessToken =
-    cookieStore.get("accessToken")?.value ??
-    cookieStore.get("transit-portal-accessToken")?.value ??
-    cookieStore.get("MohamedTransit-portal-accessToken")?.value;
-
-  if (!accessToken) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  }
-
-  const currentUserId =
-    process.env.CUSTOMER_SIDEBAR_USER_ID ??
-    (process.env.NODE_ENV === "development" ? "3" : "");
-  if (!/^\d+$/.test(currentUserId)) {
-    return NextResponse.json(
-      { error: "The customer sidebar user ID is not configured correctly." },
-      { status: 500 },
-    );
-  }
-
-  const backendUrl = normalizeApiBaseUrl(
-    process.env.BACKEND_API_URL ?? process.env.NEXT_PUBLIC_API_URL,
-  );
-  const headers = {
-    Authorization: "Bearer " + accessToken,
-    Accept: "application/json",
-  };
-  const requests = [
-    ["shipments", `${backendUrl}/Shipments/GetByImporter/${currentUserId}`],
-    [
-      "notification count",
-      `${backendUrl}/Notification/GetUnreadCount?userId=${encodeURIComponent(currentUserId)}`,
-    ],
-    ["message count", `${backendUrl}/Messaging/GetUnreadCount`],
-  ] as const;
-
   try {
-    const [responses, stageResult] = await Promise.all([
-      Promise.all(
-        requests.map(async ([name, url]) => {
-          const response = await fetch(url, {
-            headers,
-            cache: "no-store",
-            signal: AbortSignal.timeout(10_000),
-          });
+    const { accessToken, backendUrl, customerUserId: currentUserId } =
+      await getCustomerRequestContext();
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    };
+    const requests = [
+      ["shipments", `${backendUrl}/Shipments/GetByImporter/${currentUserId}`],
+      [
+        "notification count",
+        `${backendUrl}/Notification/GetUnreadCount?userId=${encodeURIComponent(currentUserId)}`,
+      ],
+      ["message count", `${backendUrl}/Messaging/GetUnreadCount`],
+    ] as const;
+    const responses = await Promise.all(
+      requests.map(async ([name, url]) => {
+        const response = await fetch(url, {
+          headers,
+          cache: "no-store",
+          signal: AbortSignal.timeout(10_000),
+        });
 
-          if (!response.ok) {
-            throw new BackendRequestError(
-              `${name} request failed with status ${response.status}.`,
-              response.status,
-            );
-          }
+        if (!response.ok) {
+          throw new BackendRequestError(
+            `${name} request failed with status ${response.status}.`,
+            response.status,
+          );
+        }
 
-          return response.json() as Promise<unknown>;
-        }),
-      ),
-      fetch(`${backendUrl}/Shipments/GetStages`, {
-        headers,
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            return {
-              data: null,
-              error: `Stage executions request failed with status ${response.status}.`,
-            };
-          }
-
-          return { data: (await response.json()) as unknown, error: null };
-        })
-        .catch((error: unknown) => ({
-          data: null,
-          error:
-            error instanceof Error
-              ? `Unable to load stage executions: ${error.message}`
-              : "Unable to load stage executions.",
-        })),
-    ]);
-
+        return response.json() as Promise<unknown>;
+      }),
+    );
     const [shipmentData, notificationCountData, messageCountData] = responses;
     const shipments = requireRecords(shipmentData, ["shipments"], "shipments").filter((shipment) =>
       belongsToUser(shipment, currentUserId, "importerId"),
     );
+    const shipmentIds = [...new Set(
+      shipments
+        .map((shipment) => readField(shipment, "id"))
+        .filter((id): id is string | number => typeof id === "string" || typeof id === "number")
+        .map(String),
+    )];
+    const stageResponses = await Promise.all(
+      shipmentIds.map(async (shipmentId) => {
+        const response = await fetch(
+          `${backendUrl}/Shipments/GetStages?shipmentId=${encodeURIComponent(shipmentId)}`,
+          {
+            headers,
+            cache: "no-store",
+            signal: AbortSignal.timeout(10_000),
+          },
+        );
+        if (!response.ok) {
+          return {
+            data: null,
+            error: `Stage executions request failed with status ${response.status}.`,
+          };
+        }
+        return { data: (await response.json()) as unknown, error: null };
+      }),
+    ).catch((error: unknown) => [{
+      data: null,
+      error: error instanceof Error
+        ? `Unable to load stage executions: ${error.message}`
+        : "Unable to load stage executions.",
+    }]);
+    const stageData = stageResponses.flatMap((result) =>
+      result.data === null ? [] : [result.data],
+    );
+    const stageError =
+      stageResponses.find((result) => result.error)?.error ?? null;
     const unreadNotificationsCount = requireUnreadCount(
       notificationCountData,
       "notifications",
     );
     const unreadMessagesCount = requireUnreadCount(messageCountData, "messages");
-    const customerShipmentIds = new Set(
-      shipments
-        .map((shipment) => readField(shipment, "id"))
-        .filter((id): id is string | number => typeof id === "string" || typeof id === "number")
-        .map(String),
-    );
-    let issuesError =
-      stageResult.error ??
-      (stageResult.data === null
-        ? "Stage executions endpoint returned an empty response."
-        : null);
+    let issuesError = stageError;
     let issues: SidebarIssue[] = [];
-    if (stageResult.data && !issuesError) {
+    if (stageData.length && !issuesError) {
       try {
-        const stages = requireRecords(
-          stageResult.data,
-          ["stages", "executions", "serviceStageExecutions"],
-          "stage executions",
-        ).filter((stage) => {
-          const shipmentId = readField(stage, "shipmentId");
-          return (
-            (typeof shipmentId === "string" || typeof shipmentId === "number") &&
-            customerShipmentIds.has(String(shipmentId))
-          );
-        });
+        const stages = stageData.flatMap((value) =>
+          requireRecords(
+            value,
+            ["stages", "executions", "serviceStageExecutions"],
+            "stage executions",
+          ),
+        );
 
         issues = stages
           .map((stage, index) => {
@@ -317,7 +290,7 @@ export async function GET() {
               shipmentId,
               isBlocked,
               requiresCustomerAction,
-              stageName: readText(stage, "stageName", "stepName", "taskName", "name", "title"),
+              stageName: readText(stage, "stageName", "stepName", "taskName", "stage", "name", "title"),
               description: readText(stage, "description", "notes", "comments"),
             };
           })
@@ -354,7 +327,7 @@ export async function GET() {
       },
       {
         status:
-          error instanceof BackendRequestError && [401, 403].includes(error.status)
+          error instanceof CustomerContextError || error instanceof BackendRequestError
             ? error.status
             : 502,
       },

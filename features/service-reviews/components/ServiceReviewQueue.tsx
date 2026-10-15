@@ -3,7 +3,51 @@
 import React from "react";
 import { useEffect } from "react";
 import { useServiceReviewStore } from "../serviceReview.store";
-import { Search, Clock, RefreshCw } from "lucide-react";
+import { Search, RefreshCw, ShieldAlert } from "lucide-react";
+
+const getRelativeTime = (value: string): string => {
+  if (!value || value === "Not recorded") return "Time not recorded";
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return "Time not recorded";
+
+  const elapsedHours = Math.max(0, Math.floor((Date.now() - timestamp) / 3_600_000));
+  if (elapsedHours < 1) return "Just now";
+  if (elapsedHours < 24) return `${elapsedHours}h ago`;
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `${elapsedDays}d ago`;
+};
+
+const getStatusClasses = (status: string): string => {
+  const normalized = status.toLowerCase();
+  if (normalized.includes("block") || normalized.includes("reject")) {
+    return "border-rose-200 bg-rose-50 text-rose-800";
+  }
+  if (normalized.includes("customer action") || normalized.includes("attention")) {
+    return "border-amber-200 bg-amber-50 text-amber-800";
+  }
+  if (normalized.includes("review") || normalized.includes("submit")) {
+    return "border-blue-200 bg-blue-50 text-blue-800";
+  }
+  if (normalized.includes("approv") || normalized.includes("complete")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-700";
+};
+
+const getChannelClasses = (channel: string): string => {
+  switch (channel) {
+    case "Red channel":
+      return "border-rose-200 bg-rose-50 text-rose-800";
+    case "Yellow channel":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "Green channel":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    case "Blue channel":
+      return "border-blue-200 bg-blue-50 text-blue-800";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-600";
+  }
+};
 
 export function ServiceReviewQueue() {
   const {
@@ -25,8 +69,10 @@ export function ServiceReviewQueue() {
   const filteredCases = cases.filter(
     (c) =>
       c.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.trackingNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.importer.toLowerCase().includes(searchTerm.toLowerCase())
+      c.importer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.route.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -36,7 +82,7 @@ export function ServiceReviewQueue() {
           <div>
             <h2 className="text-sm font-bold text-slate-900">Review queue</h2>
             <p className="mt-1 text-xs text-slate-500">
-              {filteredCases.length} of {cases.length} cases · Assessor pending reviews
+              {filteredCases.length} of {cases.length} cases
             </p>
           </div>
           <button
@@ -90,36 +136,53 @@ export function ServiceReviewQueue() {
             <p>{cases.length ? "No cases match your search." : "No pending service reviews were returned by the Assessor API."}</p>
             {!cases.length && <p className="mt-1 text-xs text-slate-400">Submitted services appear here after the backend marks them ready for assessment.</p>}
           </div>
-        ) : filteredCases.map((item) => (
-          <div
-            key={item.id}
-            onClick={() => setSelectedCaseId(item.id)}
-            className={`cursor-pointer border-l-2 p-4 transition-colors ${
-              selectedCaseId === item.id ? "border-l-cyan-500 bg-blue-50/70" : "border-l-transparent hover:bg-slate-50"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-sky-700">{item.id}</span>
-                <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-                  <Clock className="h-3 w-3 text-amber-600" />
-                  {item.status}
+        ) : filteredCases.map((item) => {
+          const isSelected = selectedCaseId === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={isSelected}
+              onClick={() => setSelectedCaseId(item.id)}
+              className={`block w-full border-l-2 p-4 text-left transition-colors ${
+                isSelected
+                  ? "border-l-cyan-500 bg-blue-50/70"
+                  : "border-l-transparent hover:bg-slate-50"
+              }`}
+            >
+              <span className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-sky-700">
+                    {item.trackingNumber}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(item.status)}`}
+                  >
+                    {item.status}
+                  </span>
                 </span>
-              </div>
-              <span className="text-xs text-slate-400">
-                {item.updatedAt === "Not recorded"
-                  ? item.updatedAt
-                  : new Date(item.updatedAt).toLocaleString()}
+                <span className="shrink-0 text-xs text-slate-400">
+                  {getRelativeTime(item.updatedAt)}
+                </span>
               </span>
-            </div>
-            <h3 className="text-sm font-semibold text-slate-900 mt-1.5">
-              {item.title}
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {item.importer} · {item.trackingNumber}
-            </p>
-          </div>
-        ))}
+              <span className="mt-2 flex flex-wrap items-center gap-2">
+                <span
+                  title={item.channel === "Red channel" ? "Physical inspection and valuation review" : undefined}
+                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${getChannelClasses(item.channel)}`}
+                >
+                  <ShieldAlert aria-hidden="true" className="h-3 w-3" />
+                  {item.channel}
+                </span>
+              </span>
+              <span className="mt-2 block text-sm font-semibold text-slate-900">
+                {item.title}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {item.importer}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

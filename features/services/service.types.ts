@@ -37,6 +37,7 @@ export type ServiceColumn =
 export interface ServiceRecord {
   id: string;
   shipmentId?: string;
+  referenceNumber?: string;
   title: string;
   importerName: string;
   importerCode: string;
@@ -48,6 +49,7 @@ export interface ServiceRecord {
   sla: string;
   isOverdue?: boolean;
   updated: string;
+  updatedAtTimestamp?: number | null;
 }
 
 export interface ServiceFiltersState {

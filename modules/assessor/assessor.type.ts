@@ -10,6 +10,52 @@ export interface AssessorServiceReviewRequest {
   reviewNotes: string | null;
 }
 
+export type RecordAssessmentDecision =
+  | "Approved"
+  | "Rejected"
+  | "Requires customer action";
+
+export interface RecordAssessmentRequest {
+  serviceId: number;
+  decision: RecordAssessmentDecision;
+  taxAmount: number;
+  dutyAmount: number;
+  notes: string | null;
+}
+
+export interface EscalateServiceRequest {
+  serviceId: number;
+  reason: string;
+  notes: string | null;
+}
+
+export interface NotifyImporterRequest {
+  serviceId: number;
+  subject: string;
+  message: string;
+  isUrgent: boolean;
+}
+
+export interface AddStageDiscussionRequest {
+  serviceId: number;
+  stageId: number;
+  comment: string;
+}
+
+export interface AssessorServiceStage {
+  id: number;
+  name: string;
+  status: string | null;
+  details?: Record<string, unknown>;
+}
+
+export interface AssessorStageDiscussion {
+  id: string;
+  comment: string;
+  createdAt: string | null;
+  author: string | null;
+}
+
 export interface AssessorComplianceFeedbackRequest {
   shipmentId: number;
   feedback: string;
@@ -245,6 +291,7 @@ export interface ApprovalCounts {
   all: number;
   pending: number;
   returned: number;
+  flagged: number;
 }
 
 export interface VerifyCustomerDocumentRequest {

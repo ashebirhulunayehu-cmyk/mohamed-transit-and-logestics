@@ -6,7 +6,15 @@ import { useDocumentStore } from "../document.store";
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
-export function UploadSection() {
+interface UploadSectionProps {
+  contextLabel?: string;
+  onUploaded?: () => void;
+}
+
+export function UploadSection({
+  contextLabel = "Assessor upload",
+  onUploaded,
+}: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const uploadDocument = useDocumentStore((state) => state.uploadDocument);
   const [uploading, setUploading] = useState(false);
@@ -74,6 +82,7 @@ export function UploadSection() {
       setSuccess(`${selectedFile.name} was uploaded successfully.`);
       if (inputRef.current) inputRef.current.value = "";
       setSelectedFile(null);
+      onUploaded?.();
     } catch (uploadError: unknown) {
       const message =
         uploadError instanceof Error
@@ -92,7 +101,7 @@ export function UploadSection() {
       <div className="mb-4 flex items-center justify-between gap-3 pr-10">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-            Assessor upload
+            {contextLabel}
           </p>
           <h3 className="mt-1 text-lg font-bold text-slate-900">Upload supporting document</h3>
         </div>

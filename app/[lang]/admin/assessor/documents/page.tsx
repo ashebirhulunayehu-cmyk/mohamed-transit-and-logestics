@@ -9,7 +9,7 @@ import { UploadSection } from "@/features/documents/components/UploadSection";
 import { useDocumentStore } from "@/features/documents/document.store";
 
 export default function DocumentsPage() {
-  const fetchDocuments = useDocumentStore((state) => state.fetchDocuments);
+  const fetchDocuments = useDocumentStore((state) => state.fetchAssessmentDocuments);
   const error = useDocumentStore((state) => state.error);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
 
@@ -75,7 +75,7 @@ export default function DocumentsPage() {
             <div id="assessor-document-upload-title" className="sr-only">
               Upload document
             </div>
-            <UploadSection />
+            <UploadSection onUploaded={() => void fetchDocuments()} />
           </section>
         </div>
       )}

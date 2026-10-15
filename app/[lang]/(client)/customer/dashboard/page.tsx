@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useParams, useSearchParams } from "next/navigation";
 import {
+  ArrowRight,
   AlertCircle,
   CheckCircle2,
   CircleDollarSign,
@@ -10,6 +12,7 @@ import {
   FileText,
   LoaderCircle,
   Package,
+  Plus,
   Truck,
   X,
 } from "lucide-react";
@@ -28,6 +31,8 @@ interface Shipment {
   status: string;
   origin: string;
   destination: string;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 interface StageExecution {
@@ -171,11 +176,15 @@ const readBoolean = (record: Record<string, unknown>, ...names: string[]): boole
   throw new Error(`The backend returned an invalid ${names[0]} flag.`);
 };
 
-const mapShipment = (record: Record<string, unknown>, index: number): Shipment => ({
-  id: readString(record, "id", "shipmentId") || `shipment-${index + 1}`,
-  trackingNumber:
-    readString(record, "trackingNumber", "trackingId", "serviceNumber") ||
-    `Shipment ${index + 1}`,
+const requiredId = (record: Record<string, unknown>, ...names: string[]): string => {
+  const id = readString(record, ...names).trim();
+  if (!id) throw new Error(`The backend returned a record without ${names[0]}.`);
+  return id;
+};
+
+const mapShipment = (record: Record<string, unknown>): Shipment => ({
+  id: requiredId(record, "id", "shipmentId"),
+  trackingNumber: readString(record, "trackingNumber", "trackingId", "serviceNumber"),
   mode: readString(record, "mode", "serviceType") || "Not specified",
   assignedHub: readString(record, "assignedHub", "hub") || "Not assigned",
   status: (() => {
@@ -194,16 +203,17 @@ const mapShipment = (record: Record<string, unknown>, index: number): Shipment =
   })(),
   origin: readString(record, "origin", "originPort", "countryOfOrigin") || "Not specified",
   destination: readString(record, "destination") || "Not specified",
+  createdAt: readString(record, "createAt", "createdAt") || null,
+  updatedAt: readString(record, "updatedAt") || null,
 });
 
 const mapStageExecution = (
   record: Record<string, unknown>,
-  index: number,
 ): StageExecution => ({
-  id: readString(record, "id", "serviceStageExecutionId") || `stage-${index + 1}`,
+  id: requiredId(record, "id", "serviceStageExecutionId"),
   shipmentId: readString(record, "shipmentId", "shipmentID"),
-  stageName: readString(record, "stageName", "serviceStageName", "name", "title") || `Stage ${index + 1}`,
-  description: readString(record, "description", "notes", "comments"),
+  stageName: readString(record, "stageName", "serviceStageName", "stage", "name", "title"),
+  description: readString(record, "description", "notes", "comments", "blockReason"),
   status: readString(record, "status", "statusName") || "Pending",
   sequence: readAmount(record, "sequence", "stageOrder", "executionOrder", "order"),
   isBlocked: readBoolean(record, "isBlocked"),
@@ -219,7 +229,7 @@ const mapCustomerProfile = (record: Record<string, unknown>): CustomerProfile =>
   verificationNotes: readString(record, "verificationNotes"),
 });
 
-const mapTaxRecord = (record: Record<string, unknown>, index: number): TaxRecord => {
+const mapTaxRecord = (record: Record<string, unknown>): TaxRecord => {
   const rawStatus = field(record, "status", "paymentStatus");
   const isPaid =
     rawStatus === 1 ||
@@ -228,7 +238,7 @@ const mapTaxRecord = (record: Record<string, unknown>, index: number): TaxRecord
     (typeof rawStatus === "string" && rawStatus.toLowerCase() === "paid");
 
   return {
-    id: readString(record, "id", "taxRecordId") || `tax-${index + 1}`,
+    id: requiredId(record, "id", "taxRecordId"),
     shipmentId: readString(record, "shipmentId") || null,
     taxCategory: readString(record, "taxCategory") || "Tax",
     referenceNumber: readString(record, "referenceNumber", "reference") || "—",
@@ -241,10 +251,10 @@ const mapTaxRecord = (record: Record<string, unknown>, index: number): TaxRecord
   };
 };
 
-const mapDocument = (record: Record<string, unknown>, index: number): CustomerDocument => {
+const mapDocument = (record: Record<string, unknown>): CustomerDocument => {
   const rawVerified = field(record, "isVerified", "verified");
   return {
-    id: readString(record, "id", "documentId") || `document-${index + 1}`,
+    id: requiredId(record, "id", "documentId"),
     originalFileName:
       readString(record, "originalFileName", "fileName", "name") || "Uploaded document",
     mimeType: readString(record, "mimeType", "contentType") || "Unknown file type",
@@ -258,7 +268,7 @@ const mapDocument = (record: Record<string, unknown>, index: number): CustomerDo
   };
 };
 
-const mapTicket = (record: Record<string, unknown>, index: number): SupportRequest => {
+const mapTicket = (record: Record<string, unknown>): SupportRequest => {
   const rawStatus = readString(record, "status", "ticketStatus");
   const normalizedStatus = rawStatus.toLowerCase();
   const status: TicketStatus = normalizedStatus.includes("respond")
@@ -267,7 +277,7 @@ const mapTicket = (record: Record<string, unknown>, index: number): SupportReque
       ? "Closed"
       : "Pending";
   return {
-    id: readString(record, "id", "ticketId") || `ticket-${index + 1}`,
+    id: requiredId(record, "id", "ticketId"),
     subject: readString(record, "subject", "title") || "Support request",
     description: readString(record, "description", "message") || "",
     status,
@@ -354,27 +364,33 @@ async function readCustomerProfile(signal: AbortSignal): Promise<CustomerProfile
 
 async function fetchViewData(view: ViewKey, signal: AbortSignal): Promise<ViewData> {
   if (view === "shipments") {
-    const [shipments, stageResult] = await Promise.all([
-      readApiList("shipments", view, mapShipment, signal),
-      readApiList("stages", view, mapStageExecution, signal)
-        .then((stages) => ({ stages, error: null }))
-        .catch((error: unknown) => ({
-          stages: [] as StageExecution[],
-          error:
-            error instanceof Error
-              ? error.message
-              : "Unable to load shipment milestones.",
-        })),
-    ]);
-    const shipmentIds = new Set(shipments.map((shipment) => shipment.id));
+    const shipments = await readApiList("shipments", view, mapShipment, signal);
+    let stages: StageExecution[] = [];
+    let stagesError: string | null = null;
+    if (shipments.length) {
+      try {
+        stages = await readApiList(
+          "stages",
+          view,
+          mapStageExecution,
+          signal,
+          `?shipmentIds=${encodeURIComponent(shipments.map((shipment) => shipment.id).join(","))}`,
+        );
+      } catch (error: unknown) {
+        stagesError =
+          error instanceof Error
+            ? error.message
+            : "Unable to load shipment milestones.";
+      }
+    }
     return {
       view,
       data: {
         shipments,
-        stages: stageResult.stages
-          .filter((stage) => shipmentIds.has(stage.shipmentId))
+        stages: stages
+          .filter((stage) => shipments.some((shipment) => shipment.id === stage.shipmentId))
           .sort((a, b) => a.sequence - b.sequence),
-        stagesError: stageResult.error,
+        stagesError,
       },
     };
   }
@@ -419,9 +435,11 @@ function ErrorPanel({ message, onRetry }: { message: string; onRetry: () => void
 
 export default function CustomerDashboardPage() {
   const signedInUser = useAuthStore((state) => state.user);
+  const { lang = "en" } = useParams<{ lang: string }>();
   const searchParams = useSearchParams();
   const requestedView = searchParams.get("view");
-  const activeView = supportedViews.includes(requestedView as ViewKey)
+  const hasExplicitView = supportedViews.includes(requestedView as ViewKey);
+  const activeView = hasExplicitView
     ? (requestedView as ViewKey)
     : "shipments";
   const [shipments, setShipments] = useState<Shipment[]>([]);
@@ -593,19 +611,71 @@ export default function CustomerDashboardPage() {
       stageExecutions.filter(
         (stage) => stage.isBlocked || stage.requiresCustomerAction,
       ).length;
+    const completedShipments = shipments.filter((shipment) =>
+      /complete|done|delivered/i.test(shipment.status),
+    ).length;
+    const activeShipments = shipments.filter(
+      (shipment) => !/complete|done|delivered|cancel|reject/i.test(shipment.status),
+    ).length;
+    const actionDataUnavailable = Boolean(stageExecutionsError || taxRecordsError);
     return [
-      { label: "Total shipments", value: shipmentsLoaded ? String(shipments.length) : "Loading…", icon: Package },
+      { label: "Active services", value: shipmentsLoaded ? String(activeShipments) : "Loading…", icon: Truck },
+      { label: "Awaiting your action", value: !shipmentsLoaded || !taxRecordsLoaded ? "Loading…" : actionDataUnavailable ? "Unavailable" : String(actionsRequired), icon: ClipboardList },
       { label: "Pending duties", value: !taxRecordsLoaded ? "Loading…" : taxRecordsError ? "Unavailable" : formatMoney(pendingDuties), icon: CircleDollarSign },
-      { label: "Actions required", value: !shipmentsLoaded || !taxRecordsLoaded ? "Loading…" : taxRecordsError ? "Unavailable" : String(actionsRequired), icon: ClipboardList },
+      { label: "Completed services", value: shipmentsLoaded ? String(completedShipments) : "Loading…", icon: Package },
     ];
   }, [
     shipments,
     stageExecutions,
+    stageExecutionsError,
     taxRecords,
     shipmentsLoaded,
     taxRecordsLoaded,
     taxRecordsError,
   ]);
+  const actionItems = useMemo(() => {
+    const shipmentById = new Map(shipments.map((shipment) => [shipment.id, shipment]));
+    const stages = stageExecutions
+      .filter((stage) => stage.isBlocked || stage.requiresCustomerAction)
+      .map((stage) => {
+        const shipment = shipmentById.get(stage.shipmentId);
+        return {
+          id: `stage-${stage.id}`,
+          title: stage.stageName || "Milestone update",
+          detail: [
+            shipment?.trackingNumber || null,
+            stage.isBlocked ? "Blocked" : null,
+            stage.requiresCustomerAction ? "Customer action required" : null,
+          ].filter(Boolean).join(" · "),
+          description: stage.description,
+          href: `/${lang}/customer/dashboard?view=shipments`,
+        };
+      });
+    const unpaidTaxes = taxRecords
+      .filter((record) => record.status === "Unpaid")
+      .map((record) => ({
+        id: `tax-${record.id}`,
+        title: record.taxCategory || "Unpaid duty",
+        detail: `${record.referenceNumber} · ${formatMoney(Math.max(0, record.assessedAmount - record.paidAmount))} outstanding`,
+        description: record.dueDate ? `Due ${record.dueDate}` : "",
+        href: `/${lang}/customer/dashboard?view=tax-records`,
+      }));
+    return [...stages, ...unpaidTaxes];
+  }, [lang, shipments, stageExecutions, taxRecords]);
+  const recentShipments = useMemo(() => {
+    const byRecentDate = (a: Shipment, b: Shipment) => {
+      const dateA = new Date(a.updatedAt ?? a.createdAt ?? 0).getTime();
+      const dateB = new Date(b.updatedAt ?? b.createdAt ?? 0).getTime();
+      return (Number.isNaN(dateB) ? 0 : dateB) - (Number.isNaN(dateA) ? 0 : dateA);
+    };
+    const active = shipments
+      .filter((shipment) => !/complete|done|delivered|cancel|reject/i.test(shipment.status))
+      .sort(byRecentDate);
+    const completed = shipments
+      .filter((shipment) => /complete|done|delivered/i.test(shipment.status))
+      .sort(byRecentDate);
+    return { active: active.slice(0, 3), completed: completed.slice(0, 3) };
+  }, [shipments]);
 
   const submitTicket = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -652,7 +722,7 @@ export default function CustomerDashboardPage() {
     [signedInUser?.firstName, signedInUser?.lastName].filter(Boolean).join(" ") ||
     signedInUser?.username ||
     signedInUser?.email ||
-    "current account";
+    "";
 
   return (
     <>
@@ -671,7 +741,7 @@ export default function CustomerDashboardPage() {
               <div>
                 <h2 className="font-semibold">This account is not linked to a customer profile</h2>
                 <p className="mt-1 text-sm">
-                  The signed-in account ({signedInAccount}) has no customer profile in the backend.
+                  The signed-in account{signedInAccount ? ` (${signedInAccount})` : ""} has no customer profile in the backend.
                   Customer shipment and document data cannot be loaded for this account.
                 </p>
                 <p className="mt-2 text-sm">
@@ -704,25 +774,239 @@ export default function CustomerDashboardPage() {
           </section>
         ) : (
           <>
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-700" />
-            <div>
-              <p className="text-sm font-semibold">{customerProfile.businessName || title}</p>
-              <p className="mt-1 text-xs text-emerald-800">TIN: {customerProfile.tinNumber || "Not provided"} · Contact: {customerProfile.contactPerson || "Not provided"}</p>
+        {!hasExplicitView && (
+          <div className="space-y-6">
+            <section className="flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                  {customerProfile.businessName || "Customer account"}
+                </p>
+                <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+                  {signedInAccount ? `Welcome back, ${signedInAccount}` : "Welcome to your dashboard"}
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                  Track your services, review outstanding actions, and manage your importer records.
+                </p>
+                <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Verified importer{customerProfile.tinNumber ? ` · TIN ${customerProfile.tinNumber}` : ""}
+                </p>
+              </div>
+              <Link
+                href={`/${lang}/component/request-service`}
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800"
+              >
+                <Plus className="h-4 w-4" />
+                Request a service
+              </Link>
+            </section>
+
+            {currentError && (
+              <ErrorPanel
+                message={currentError}
+                onRetry={() => void loadView("shipments")}
+              />
+            )}
+
+            {actionItems.length > 0 && (
+              <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 shrink-0 text-amber-700" />
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {actionItems.length} item{actionItems.length === 1 ? "" : "s"} may need your attention
+                    </p>
+                    <p className="mt-1 text-xs text-amber-800">
+                      Review service milestones and unpaid duties from your account records.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={`/${lang}/customer/dashboard?view=shipments`}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-amber-900 hover:underline"
+                >
+                  Review services <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </section>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {metrics.map(({ label, value, icon: Icon }) => (
+                <section key={label} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">{label}</p>
+                    <p className="mt-1 text-xl font-bold text-slate-950">{value}</p>
+                  </div>
+                </section>
+              ))}
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-3">
+              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:col-span-2">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Service progress</p>
+                    <h2 className="mt-1 text-lg font-bold text-slate-950">Active services</h2>
+                  </div>
+                  <Link
+                    href={`/${lang}/customer/dashboard?view=shipments`}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900"
+                  >
+                    View all <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+                <div className="divide-y divide-slate-100 px-5">
+                  {viewLoading ? (
+                    <div className="py-5"><LoadingPanel /></div>
+                  ) : currentError ? (
+                    <p className="py-5 text-sm text-slate-600">Service progress is unavailable until the shipment list loads.</p>
+                  ) : recentShipments.active.length ? (
+                    recentShipments.active.map((shipment) => {
+                      const rows = stageExecutions.filter((stage) => stage.shipmentId === shipment.id);
+                      const completedCount = rows.filter((stage) =>
+                        /complete|done|delivered/i.test(stage.status),
+                      ).length;
+                      const progress = rows.length
+                        ? Math.round((completedCount / rows.length) * 100)
+                        : null;
+                      return (
+                        <article key={shipment.id} className="py-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <h3 className="font-mono text-sm font-bold text-blue-800">
+                                {shipment.trackingNumber || "Tracking number unavailable"}
+                              </h3>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {shipment.origin} <span aria-hidden>→</span> {shipment.destination}
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-800">
+                              {shipment.status}
+                            </span>
+                          </div>
+                          {progress === null ? (
+                            <p className="mt-3 text-xs text-slate-500">
+                              {stageExecutionsError
+                                ? "Milestone progress is unavailable."
+                                : "No milestone records are available for this service."}
+                            </p>
+                          ) : (
+                            <div className="mt-4">
+                              <div className="mb-1.5 flex justify-between text-xs text-slate-500">
+                                <span>{completedCount} of {rows.length} milestones complete</span>
+                                <span className="font-semibold text-slate-700">{progress}%</span>
+                              </div>
+                              <div
+                                className="h-2 overflow-hidden rounded-full bg-slate-100"
+                                role="progressbar"
+                                aria-valuenow={progress}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-label={`Progress for ${shipment.trackingNumber || "service"}`}
+                              >
+                                <div
+                                  className="h-full rounded-full bg-blue-600 transition-all"
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })
+                  ) : (
+                    <p className="py-6 text-sm text-slate-500">
+                      No active services were returned for this customer account.
+                    </p>
+                  )}
+                  {stageExecutionsError && (
+                    <p className="py-3 text-xs text-amber-800" role="status">
+                      Milestone information is incomplete: {stageExecutionsError}
+                    </p>
+                  )}
+                </div>
+              </section>
+
+              <div className="space-y-5">
+                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-slate-200 px-5 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Important updates</p>
+                    <h2 className="mt-1 text-lg font-bold text-slate-950">Items to review</h2>
+                  </div>
+                  <div className="divide-y divide-slate-100 px-5">
+                    {taxRecordsError && (
+                      <p className="py-3 text-xs text-amber-800" role="status">
+                        Duty updates unavailable: {taxRecordsError}
+                      </p>
+                    )}
+                    {!shipmentsLoaded || !taxRecordsLoaded ? (
+                      <p className="py-5 text-sm text-slate-500">Loading account updates…</p>
+                    ) : actionItems.length ? (
+                      actionItems.slice(0, 4).map((item) => (
+                        <Link key={item.id} href={item.href} className="block py-3 hover:bg-slate-50">
+                          <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                          <p className="mt-1 text-xs text-slate-600">{item.detail}</p>
+                          {item.description && <p className="mt-1 text-xs text-slate-500">{item.description}</p>}
+                        </Link>
+                      ))
+                    ) : !stageExecutionsError && !taxRecordsError ? (
+                      <p className="py-5 text-sm text-slate-500">
+                        No outstanding actions were returned by your account records.
+                      </p>
+                    ) : null}
+                    {actionItems.length > 4 && (
+                      <Link
+                        href={`/${lang}/customer/dashboard?view=shipments`}
+                        className="inline-flex items-center gap-1 py-3 text-xs font-semibold text-blue-700 hover:text-blue-900"
+                      >
+                        View all updates <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    )}
+                  </div>
+                </section>
+
+                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-5 py-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recently completed</p>
+                      <h2 className="mt-1 text-lg font-bold text-slate-950">Completed services</h2>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-slate-100 px-5">
+                    {!shipmentsLoaded ? (
+                      <p className="py-4 text-sm text-slate-500">Loading completed services…</p>
+                    ) : recentShipments.completed.length ? (
+                      recentShipments.completed.map((shipment) => (
+                        <div key={shipment.id} className="flex items-center justify-between gap-3 py-3">
+                          <div className="min-w-0">
+                            <p className="truncate font-mono text-sm font-semibold text-slate-900">
+                              {shipment.trackingNumber || "Tracking number unavailable"}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {shipment.updatedAt || shipment.createdAt || "Completion date unavailable"}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                            {shipment.status}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="py-4 text-sm text-slate-500">
+                        No completed services were returned for this account.
+                      </p>
+                    )}
+                  </div>
+                </section>
+              </div>
             </div>
           </div>
-          <span className="rounded-full bg-emerald-200 px-3 py-1 text-xs font-bold text-emerald-900">Verified importer</span>
-        </section>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {metrics.map(({ label, value, icon: Icon }) => (
-            <section key={label} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><Icon className="h-5 w-5" /></div>
-              <div><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 text-xl font-bold text-slate-950">{value}</p></div>
-            </section>
-          ))}
-        </div>
+        )}
 
+        {hasExplicitView && (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
             <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Customer workspace</p><h2 className="mt-1 text-lg font-bold text-slate-950">{activeLabel}</h2></div>
@@ -849,6 +1133,7 @@ export default function CustomerDashboardPage() {
             )}
           </div>
         </section>
+        )}
           </>
         )}
       </main>

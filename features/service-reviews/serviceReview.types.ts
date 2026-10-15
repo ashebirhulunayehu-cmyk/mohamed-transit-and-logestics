@@ -8,6 +8,7 @@ export type RiskChannel =
 export interface EvidenceFile {
   id: string;
   documentId?: string;
+  serviceStageId?: string;
   name: string;
   type: string;
   source: "Customer" | "Service";
@@ -45,6 +46,12 @@ export interface ServiceCase {
   destination: string;
   countryOfOrigin: string;
   routeCategory: string;
+  commodity: string;
+  hsCode: string;
+  incoterm: string;
+  billOfLading: string;
+  currentStage: string;
+  sla: string;
   status: string;
   assignedHub: string;
   mode: string;
@@ -62,6 +69,5 @@ export interface ServiceCase {
 export interface ServiceReviewStats {
   awaitingReview: number;
   redChannel: number;
-  withDocuments: number;
-  unverifiedDocuments: number;
+  submittedForReview: number;
 }

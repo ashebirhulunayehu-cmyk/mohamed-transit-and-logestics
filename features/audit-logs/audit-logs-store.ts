@@ -10,6 +10,8 @@ export interface AuditLog {
   description: string;
   timestamp: string;
   stage?: string;
+  actor?: string;
+  category?: string;
 }
 
 interface AuditState {
@@ -45,6 +47,18 @@ const readText = (record: ApiRecord, ...keys: string[]): string => {
   return '';
 };
 
+const readActor = (record: ApiRecord): string => {
+  const directActor = readText(record, 'actorName', 'userName', 'performedByName', 'createdByName', 'username');
+  if (directActor) return directActor;
+
+  const actor = asRecord(record.actor ?? record.user ?? record.performedBy ?? record.createdBy ?? record.assessor);
+  if (!actor) return '';
+
+  return readText(actor, 'fullName', 'name', 'displayName')
+    || [readText(actor, 'firstName'), readText(actor, 'lastName')].filter(Boolean).join(' ')
+    || readText(actor, 'username', 'email');
+};
+
 const unwrapLogList = (value: unknown): unknown[] => {
   if (Array.isArray(value)) return value;
 
@@ -70,6 +84,8 @@ const normalizeLog = (value: unknown, index: number): AuditLog | null => {
   const timestamp = readText(record, 'timestamp', 'createdAt', 'createdDate', 'createdOn', 'actionDate', 'eventDate', 'date');
   const reference = readText(record, 'reference', 'serviceId', 'serviceReference', 'trackingNumber', 'trackingId', 'customerId', 'referenceId');
   const id = readText(record, 'id', 'logId', 'assessmentLogId') || `${timestamp}-${index}`;
+  const actor = readActor(record);
+  const category = readText(record, 'category', 'entityType', 'module', 'resourceType');
 
   if (!type && !description) return null;
 
@@ -80,6 +96,8 @@ const normalizeLog = (value: unknown, index: number): AuditLog | null => {
     description: description || type,
     timestamp: timestamp || '—',
     stage: readText(record, 'stage', 'stageName', 'serviceStage'),
+    actor: actor || undefined,
+    category: category || undefined,
   };
 };
 

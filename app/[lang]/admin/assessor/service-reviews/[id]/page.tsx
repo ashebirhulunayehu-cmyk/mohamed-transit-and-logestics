@@ -130,7 +130,11 @@ export default function SingleServiceCasePage() {
           loading={documentsLoading}
           error={documentsError}
         />
-        <AssessmentDecision shipmentId={currentCase.shipmentId} />
+        <AssessmentDecision
+          key={currentCase.shipmentId}
+          shipmentId={currentCase.shipmentId}
+          serviceStatus={currentCase.status}
+        />
       </section>
     </main>
   );
