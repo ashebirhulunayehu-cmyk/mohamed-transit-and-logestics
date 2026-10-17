@@ -1,25 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
+  AlertCircle,
   CheckCircle2,
   Circle,
   Clock3,
   FileText,
   MapPin,
   MessageSquare,
+  LoaderCircle,
   RefreshCw,
   ShieldCheck,
   Truck,
+  UploadCloud,
 } from "lucide-react";
 import type {
   ManagerServiceDetail,
   ManagerServiceDocument,
   ManagerServiceStage,
 } from "@/modules/manager/manager.type";
+import { useAuthStore } from "@/modules/auth/auth.store";
 import { useManagerStore } from "@/modules/manager/manager.store";
 
 type DetailTab = "stage" | "documents" | "discussion" | "consignment";
@@ -81,11 +85,96 @@ const formatDate = (value: string | null | undefined): string => {
     : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 };
 
-const stageName = (stage: ManagerServiceStage, index: number): string =>
-  stage.stageName || stage.name || `Stage ${index + 1}`;
+const stageName = (stage: ManagerServiceStage, index: number): string => {
+  const rawName = stage.stageName || stage.name;
+  if (rawName && /^\d+$/.test(rawName)) {
+    const knownNames: Record<number, string> = {
+      12: "Local Permission",
+      13: "Arrival",
+      14: "Clearance Request",
+    };
+    return knownNames[Number(rawName)] ?? `Stage ${rawName}`;
+  }
+  return rawName || `Stage ${index + 1}`;
+};
 
-const stageStatus = (stage: ManagerServiceStage): string =>
-  formatStatus(stage.status ?? stage.stageStatus ?? stage.currentStatus);
+const unimodalStageName = (stage: ManagerServiceStage, index: number): string => {
+  const name = stageName(stage, index);
+  const normalizedName = name.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+  if (normalizedName === "stage1") return "Local Permission";
+  if (normalizedName === "stage2") return "Arrival";
+  if (normalizedName === "stage3") return "Clearance Request";
+  return name;
+};
+
+const multimodalStageName = (stage: ManagerServiceStage, index: number): string => {
+  const rawName = stage.stageName || stage.name;
+  const stageNumberMatch = rawName?.match(/^(?:stage\s*)?(\d+)$/i);
+  if (stageNumberMatch) {
+    const stageNames: Record<number, string> = {
+      1: "Prepayment Invoice",
+      2: "Transit Permission",
+      3: "Amendment",
+      4: "Drop Risk",
+      5: "Delivery Order",
+      6: "Warehouse Status",
+      7: "Inspection",
+      8: "Assessment and Tax Payment",
+      9: "Emergency",
+      10: "Exit and Storage Payment",
+      11: "Transportation",
+      12: "Local Permission",
+      13: "Arrival",
+      14: "Clearance",
+    };
+    return stageNames[Number(stageNumberMatch[1])] ?? `Stage ${stageNumberMatch[1]}`;
+  }
+  return rawName || `Stage ${index + 1}`;
+};
+
+const getWorkflowStages = (stages: ManagerServiceStage[], isUnimodal: boolean): ManagerServiceStage[] => {
+  if (!isUnimodal) return stages;
+
+  const stageByName = new Map<string, ManagerServiceStage>();
+  stages.forEach((stage, index) => {
+    const normalizedName = unimodalStageName(stage, index).toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+    const workflowName = normalizedName.includes("localpermission")
+      ? "localpermission"
+      : normalizedName === "arrival"
+        ? "arrival"
+        : normalizedName.includes("clearance")
+          ? "clearancerequest"
+          : null;
+
+    if (workflowName && !stageByName.has(workflowName)) {
+      stageByName.set(workflowName, stage);
+    }
+  });
+
+  const unimodalStages = ["localpermission", "arrival", "clearancerequest"]
+    .flatMap((name) => {
+      const stage = stageByName.get(name);
+      return stage ? [stage] : [];
+    });
+
+  return unimodalStages.length ? unimodalStages : stages;
+};
+
+const stageStatus = (stage: ManagerServiceStage): string => {
+  const value = stage.status ?? stage.stageStatus ?? stage.currentStatus;
+  if (typeof value === "number" || (typeof value === "string" && /^\d+$/.test(value))) {
+    const knownStatuses: Record<number, string> = {
+      1: "Not started",
+      2: "Pending",
+      3: "In progress",
+      4: "Completed",
+      5: "Blocked",
+      6: "Needs review",
+    };
+    return knownStatuses[Number(value)] ?? `Status ${value}`;
+  }
+  return formatStatus(value);
+};
 
 const stageStatusOption = (status: string): string => {
   const normalized = status.toLowerCase().replaceAll(/[\s_-]+/g, "");
@@ -132,7 +221,7 @@ function DetailField({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-1 break-words text-sm text-slate-800">{value || "—"}</dd>
+      <dd className="mt-1 wrap-break-word text-sm text-slate-800">{value || "—"}</dd>
     </div>
   );
 }
@@ -172,17 +261,29 @@ function DocumentsPanel({ documents }: { documents: ManagerServiceDocument[] }) 
 
 export default function ManagerServiceDetailPage() {
   const { id, lang } = useParams<{ id: string; lang: string }>();
+  const currentUser = useAuthStore((state) => state.user);
   const service = useManagerStore((state) => state.selectedService);
   const loading = useManagerStore((state) => state.serviceDetailLoading);
   const error = useManagerStore((state) => state.serviceDetailError);
   const fetchServiceById = useManagerStore((state) => state.fetchServiceById);
   const updateServiceStage = useManagerStore((state) => state.updateServiceStage);
+  const uploadServiceDocument = useManagerStore((state) => state.uploadServiceDocument);
   const [refreshing, setRefreshing] = useState(false);
+  const [stageUpload, setStageUpload] = useState<{ stageKey: string; file: File } | null>(null);
+  const [stageUploadBusy, setStageUploadBusy] = useState(false);
+  const [stageUploadFeedback, setStageUploadFeedback] = useState<{
+    stageKey: string;
+    error?: string;
+    success?: string;
+  } | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const stageFileInput = useRef<HTMLInputElement | null>(null);
   const [selection, setSelection] = useState<{
     serviceId: string;
     activeStage: number;
     activeTab: DetailTab;
-  }>({ serviceId: id, activeStage: 0, activeTab: "stage" });
+    stageSelected: boolean;
+  }>({ serviceId: "", activeStage: 0, activeTab: "stage", stageSelected: false });
   const [stageDrafts, setStageDrafts] = useState<Record<string, { status: string; notes: string }>>({});
   const [stageSaving, setStageSaving] = useState(false);
   const [stageFeedback, setStageFeedback] = useState<{
@@ -190,18 +291,33 @@ export default function ManagerServiceDetailPage() {
     error?: string;
     success?: string;
   } | null>(null);
-  const activeStage = selection.serviceId === id ? selection.activeStage : 0;
+  const mode = service ? getMode(service) : "Mode unavailable";
+  const isUnimodal = mode === "Unimodal";
+  const workflowStages = service ? getWorkflowStages(service.stages, isUnimodal) : [];
+  const displayStageName = (stage: ManagerServiceStage, index: number) =>
+    isUnimodal ? unimodalStageName(stage, index) : multimodalStageName(stage, index);
+  const defaultActiveStage = workflowStages.findIndex((stage) => {
+    const normalized = stageStatus(stage).toLowerCase().replaceAll(/[\s_-]+/g, "");
+    return normalized.includes("inprogress") || normalized.includes("active");
+  });
+  const hasManualStageSelection = selection.serviceId === id
+    && selection.stageSelected
+    && selection.activeStage < workflowStages.length;
+  const activeStage = hasManualStageSelection
+    ? selection.activeStage
+    : defaultActiveStage >= 0 ? defaultActiveStage : 0;
   const activeTab = selection.serviceId === id ? selection.activeTab : "stage";
 
   useEffect(() => {
     if (id) void fetchServiceById(id);
   }, [fetchServiceById, id]);
 
-  const mode = service ? getMode(service) : "Mode unavailable";
-  const isUnimodal = mode === "Unimodal";
-  const currentStage = service?.stages[activeStage];
+  const currentStage = workflowStages[activeStage];
   const currentStageStatus = currentStage ? stageStatus(currentStage) : "Status unavailable";
-  const currentStageId = currentStage?.id;
+  const currentStageId = currentStage?.stageExecutionId
+    ?? currentStage?.serviceStageExecutionId
+    ?? currentStage?.executionId
+    ?? currentStage?.id;
   const stageDraftKey = service && currentStageId !== null && currentStageId !== undefined
     ? `${service.id}:${currentStageId}`
     : `${id}:${activeStage}`;
@@ -212,6 +328,10 @@ export default function ManagerServiceDetailPage() {
     ?? currentStage?.comments
     ?? "";
   const activeStageFeedback = stageFeedback?.stageKey === stageDraftKey ? stageFeedback : null;
+  const selectedStageFile = stageUpload?.stageKey === stageDraftKey ? stageUpload.file : null;
+  const currentStageUploadFeedback = stageUploadFeedback?.stageKey === stageDraftKey
+    ? stageUploadFeedback
+    : null;
   const importer = service ? personName(service.importer) : "—";
   const risk = service
     ? typeof service.riskLevel === "string" && !/^\d+$/.test(service.riskLevel)
@@ -220,14 +340,14 @@ export default function ManagerServiceDetailPage() {
           Number(service.riskLevel)
         ] ?? "Unassigned")
     : "—";
-  const completedStages = service?.stages.filter((stage) => {
+  const completedStages = workflowStages.filter((stage) => {
     const status = stageStatus(stage).toLowerCase();
     return status.includes("complete") || status.includes("deliver");
-  }).length ?? 0;
-  const progress = service?.stages.length
-    ? Math.round((completedStages / service.stages.length) * 100)
+  }).length;
+  const progress = workflowStages.length
+    ? Math.round((completedStages / workflowStages.length) * 100)
     : null;
-  const previousStage = activeStage > 0 ? service?.stages[activeStage - 1] : null;
+  const previousStage = activeStage > 0 ? workflowStages[activeStage - 1] : null;
   const stageDocuments = currentStage?.id === null || currentStage?.id === undefined
     ? []
     : service?.documents.filter(
@@ -238,7 +358,7 @@ export default function ManagerServiceDetailPage() {
       ) ?? [];
   const recentActivity = service?.stages
     .flatMap((stage, index) => {
-      const name = stageName(stage, index);
+      const name = displayStageName(stage, index);
       const status = stageStatus(stage);
       const activity = [];
 
@@ -261,6 +381,27 @@ export default function ManagerServiceDetailPage() {
     : [];
 
   const submitStageUpdate = async (status: string) => {
+    // 1. Resolve user ID from auth store or localStorage fallback
+    let resolvedUserId = 1;
+    const authId = currentUser?.userId ?? currentUser?.UserId ?? currentUser?.id ?? currentUser?.sub;
+    
+    if (authId && !Number.isNaN(Number(authId)) && Number(authId) > 0) {
+      resolvedUserId = Number(authId);
+    } else if (typeof window !== "undefined") {
+      try {
+        const rawUser = localStorage.getItem("user") || localStorage.getItem("auth_user") || localStorage.getItem("auth-storage");
+        if (rawUser) {
+          const parsed = JSON.parse(rawUser);
+          const foundId = parsed?.userId ?? parsed?.UserId ?? parsed?.id ?? parsed?.state?.user?.id ?? parsed?.state?.user?.userId;
+          if (foundId && !Number.isNaN(Number(foundId)) && Number(foundId) > 0) {
+            resolvedUserId = Number(foundId);
+          }
+        }
+      } catch {
+        resolvedUserId = 1;
+      }
+    }
+
     if (
       !service ||
       service.id === null ||
@@ -268,35 +409,101 @@ export default function ManagerServiceDetailPage() {
       currentStageId === null ||
       currentStageId === undefined
     ) {
-      setStageFeedback({ stageKey: stageDraftKey, error: "The service or workflow stage is missing an API ID." });
+      setStageFeedback({
+        stageKey: stageDraftKey,
+        error: "The service or workflow stage is missing an API ID.",
+      });
       return;
     }
 
     setStageSaving(true);
     setStageFeedback({ stageKey: stageDraftKey });
-    const updated = await updateServiceStage({
-      shipmentId: service.id,
-      shipmentStageId: currentStageId,
+
+    const updatePayload = {
+      shipmentId: Number(service.id),
+      stageExecutionId: Number(currentStageId),
+      userId: resolvedUserId,
+      UserId: resolvedUserId,
       status,
       notes: stageNotesDraft.trim(),
-    });
+    };
+
+    console.log("Submitting stage update payload:", updatePayload);
+
+    const updated = await updateServiceStage(updatePayload);
     setStageSaving(false);
+
     if (updated) {
       setStageDrafts((drafts) => ({
         ...drafts,
         [stageDraftKey]: { status, notes: stageNotesDraft },
       }));
-      if (status === "Completed" && activeStage < (service?.stages.length ?? 0) - 1) {
+      if (status === "Completed" && activeStage < workflowStages.length - 1) {
         setSelection({
           serviceId: id,
           activeStage: activeStage + 1,
           activeTab: "stage",
+          stageSelected: true,
         });
       }
+      await fetchServiceById(id);
     }
     setStageFeedback(updated
       ? { stageKey: stageDraftKey, success: "Stage updated and refreshed from the service API." }
       : { stageKey: stageDraftKey, error: useManagerStore.getState().serviceDetailError || "Unable to update this stage." });
+  };
+
+  const selectStageFile = (file: File | null) => {
+    setStageUploadFeedback({ stageKey: stageDraftKey });
+    if (!file) {
+      setStageUpload(null);
+      return;
+    }
+
+    const acceptedFile = /\.(pdf|jpe?g|png|xlsx?)$/i.test(file.name);
+    if (!acceptedFile) {
+      setStageUploadFeedback({ stageKey: stageDraftKey, error: "Choose a PDF, JPG, PNG, or Excel file." });
+      setStageUpload(null);
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      setStageUploadFeedback({ stageKey: stageDraftKey, error: "File must be 25 MB or smaller." });
+      setStageUpload(null);
+      return;
+    }
+
+    setStageUpload({ stageKey: stageDraftKey, file });
+  };
+
+  const uploadStageFile = async () => {
+    if (!service || !currentStageId || !selectedStageFile) return;
+
+    const formData = new FormData();
+    formData.append("File", selectedStageFile, selectedStageFile.name);
+    formData.append("ServiceId", String(service.id));
+    formData.append("ServiceStageId", String(currentStageId));
+    formData.append("DocumentType", "Stage document");
+    formData.append("Description", `Uploaded for ${displayStageName(currentStage, activeStage)}`);
+
+    setStageUploadBusy(true);
+    setStageUploadFeedback({ stageKey: stageDraftKey });
+    try {
+      await uploadServiceDocument(formData);
+      setStageUpload(null);
+      setStageUploadFeedback({
+        stageKey: stageDraftKey,
+        success: `${selectedStageFile.name} uploaded successfully.`,
+      });
+      if (stageFileInput.current) stageFileInput.current.value = "";
+      await fetchServiceById(id);
+    } catch (uploadError: unknown) {
+      setStageUploadFeedback({
+        stageKey: stageDraftKey,
+        error: uploadError instanceof Error ? uploadError.message : "Unable to upload this document.",
+      });
+    } finally {
+      setStageUploadBusy(false);
+    }
   };
 
   const refreshService = async () => {
@@ -375,13 +582,13 @@ export default function ManagerServiceDetailPage() {
                 </button>
               </div>
             </div>
-            {service.stages.length > 0 && (
+            {workflowStages.length > 0 && (
               <div className="mt-6">
                 <div className="mb-2 flex items-center justify-between text-xs">
                   <span className="font-medium text-slate-500">
                     {currentStage
-                      ? `Stage ${activeStage + 1} of ${service.stages.length}`
-                      : `${completedStages} of ${service.stages.length} stages completed`}
+                      ? `Stage ${activeStage + 1} of ${workflowStages.length}`
+                      : `${completedStages} of ${workflowStages.length} stages completed`}
                   </span>
                   <span className="font-semibold text-slate-800">{progress === null ? "—" : `${progress}%`}</span>
                 </div>
@@ -395,28 +602,31 @@ export default function ManagerServiceDetailPage() {
             )}
           </section>
 
-          <section className="grid min-h-[560px] gap-4 xl:grid-cols-[minmax(220px,0.85fr)_minmax(320px,1.35fr)_minmax(240px,0.9fr)]">
+          <section className="grid min-h-140 gap-4 xl:grid-cols-[minmax(220px,0.85fr)_minmax(320px,1.35fr)_minmax(240px,0.9fr)]">
             <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                 {isUnimodal ? "Unimodal workflow" : "Multimodal workflow"}
               </p>
-              {service.stages.length ? (
+              {workflowStages.length ? (
                 <ol className="mt-4 space-y-1">
-                  {service.stages.map((stage, index) => {
+                  {workflowStages.map((stage, index) => {
                     const status = stageStatus(stage);
                     const selected = activeStage === index;
                     return (
                       <li key={stage.id ?? `${stageName(stage, index)}-${index}`}>
                         <button
                           type="button"
-                          onClick={() => setSelection({ serviceId: id, activeStage: index, activeTab: "stage" })}
+                          onClick={() => setSelection({ serviceId: id, activeStage: index, activeTab: "stage", stageSelected: true })}
                           className={`flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition ${
                             selected ? "bg-blue-50 ring-1 ring-blue-100" : "hover:bg-slate-50"
                           }`}
                         >
                           <span className="mt-0.5">{stageIcon(status)}</span>
                           <span className="min-w-0">
-                            <span className="block text-sm font-semibold text-slate-900">{stageName(stage, index)}</span>
+                            <span className="block text-sm font-semibold text-slate-900">
+                              <span className="mr-2 font-mono text-xs font-medium text-slate-400">{String(index + 1).padStart(2, "0")}</span>
+                              {displayStageName(stage, index)}
+                            </span>
                             <span className="mt-0.5 block text-xs text-slate-500">{status}</span>
                           </span>
                         </button>
@@ -436,7 +646,7 @@ export default function ManagerServiceDetailPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Stage workspace</p>
                   <h2 className="mt-1 text-lg font-semibold text-slate-900">
-                    {currentStage ? stageName(currentStage, activeStage) : "Service details"}
+                    {currentStage ? displayStageName(currentStage, activeStage) : "Service details"}
                   </h2>
                 </div>
                 {currentStage && (
@@ -456,7 +666,12 @@ export default function ManagerServiceDetailPage() {
                   <button
                     key={tab}
                     type="button"
-                    onClick={() => setSelection({ serviceId: id, activeStage, activeTab: tab })}
+                    onClick={() => setSelection({
+                      serviceId: id,
+                      activeStage,
+                      activeTab: tab,
+                      stageSelected: hasManualStageSelection,
+                    })}
                     className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
                       activeTab === tab
                         ? "bg-slate-900 text-white"
@@ -515,7 +730,7 @@ export default function ManagerServiceDetailPage() {
                           <h3 className="text-sm font-semibold text-slate-900">Previous stage summary</h3>
                           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-medium text-slate-700">
-                              {stageName(previousStage, activeStage - 1)}
+                              {displayStageName(previousStage, activeStage - 1)}
                             </p>
                             <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${stageTone(stageStatus(previousStage))}`}>
                               {stageStatus(previousStage)}
@@ -531,37 +746,111 @@ export default function ManagerServiceDetailPage() {
                           </p>
                         </section>
                       )}
-                      {stageDocuments.length > 0 && (
-                        <section className="rounded-xl border border-slate-200 p-4">
+                      <section className="rounded-xl border border-slate-200 p-4">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <h3 className="text-sm font-semibold text-slate-900">Documents for this stage</h3>
-                            <span className="text-xs text-slate-500">
-                              {stageDocuments.filter((document) => document.isVerified).length} of {stageDocuments.length} verified
-                            </span>
+                            {stageDocuments.length > 0 && (
+                              <span className="text-xs text-slate-500">
+                                {stageDocuments.filter((document) => document.isVerified).length} of {stageDocuments.length} verified
+                              </span>
+                            )}
                           </div>
-                          <ul className="mt-3 divide-y divide-slate-100">
-                            {stageDocuments.map((document, index) => (
-                              <li key={document.id ?? `${document.fileName}-${index}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                                <span className="text-sm text-slate-700">
-                                  {document.originalFileName || document.fileName || `Document ${index + 1}`}
-                                  {document.isRequired ? <span className="ml-2 text-xs text-slate-500">Required</span> : null}
-                                </span>
-                                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                                  document.isVerified
-                                    ? "bg-emerald-50 text-emerald-700"
-                                    : "bg-amber-50 text-amber-800"
-                                }`}>
-                                  {document.isVerified ? "Verified" : "Received"}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
+                          {stageDocuments.length ? (
+                            <ul className="mt-3 divide-y divide-slate-100">
+                              {stageDocuments.map((document, index) => (
+                                <li key={document.id ?? `${document.fileName}-${index}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                                  <span className="text-sm text-slate-700">
+                                    {document.originalFileName || document.fileName || `Document ${index + 1}`}
+                                    {document.isRequired ? <span className="ml-2 text-xs text-slate-500">Required</span> : null}
+                                  </span>
+                                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                                    document.isVerified
+                                      ? "bg-emerald-50 text-emerald-700"
+                                      : "bg-amber-50 text-amber-800"
+                                  }`}>
+                                    {document.isVerified ? "Verified" : "Received"}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-3 text-sm text-slate-500">No documents were returned for this stage.</p>
+                          )}
                         </section>
-                      )}
+                      <section className="rounded-xl border border-slate-200 p-4">
+                        <input
+                          ref={stageFileInput}
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls"
+                          className="hidden"
+                          disabled={stageUploadBusy}
+                          onChange={(event) => selectStageFile(event.target.files?.[0] ?? null)}
+                        />
+                        <div
+                          onDragEnter={(event) => {
+                            event.preventDefault();
+                            setIsDraggingFile(true);
+                          }}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDragLeave={(event) => {
+                            if (event.currentTarget === event.target) setIsDraggingFile(false);
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            setIsDraggingFile(false);
+                            selectStageFile(event.dataTransfer.files[0] ?? null);
+                          }}
+                          className={`flex min-h-44 flex-col items-center justify-center rounded-md border border-dashed p-5 text-center transition-colors ${
+                            isDraggingFile ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-slate-50"
+                          }`}
+                        >
+                          <UploadCloud className="h-7 w-7 text-slate-500" />
+                          <h3 className="mt-2 text-sm font-semibold text-slate-900">Attach stage documents</h3>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Drag files here, or browse. PDF, JPG, PNG, XLSX up to 25 MB each.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => stageFileInput.current?.click()}
+                            disabled={stageUploadBusy}
+                            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60"
+                          >
+                            {stageUploadBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                            {stageUploadBusy ? "Uploading..." : "Browse files"}
+                          </button>
+                        </div>
+                        {selectedStageFile && (
+                          <p className="mt-3 truncate text-sm text-slate-700">
+                            Selected: <span className="font-medium">{selectedStageFile.name}</span>
+                          </p>
+                        )}
+                        {currentStageUploadFeedback?.error && (
+                          <p role="alert" className="mt-3 flex items-center gap-2 text-sm text-red-700">
+                            <AlertCircle className="h-4 w-4 shrink-0" />
+                            {currentStageUploadFeedback.error}
+                          </p>
+                        )}
+                        {currentStageUploadFeedback?.success && (
+                          <p role="status" className="mt-3 flex items-center gap-2 text-sm text-emerald-700">
+                            <CheckCircle2 className="h-4 w-4 shrink-0" />
+                            {currentStageUploadFeedback.success}
+                          </p>
+                        )}
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => void uploadStageFile()}
+                            disabled={!selectedStageFile || stageUploadBusy}
+                            className="rounded-md bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {stageUploadBusy ? "Uploading..." : "Upload document"}
+                          </button>
+                        </div>
+                      </section>
                       <div className="space-y-4 rounded-xl border border-slate-200 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="text-sm font-semibold text-slate-900">{stageName(currentStage, activeStage)}</h3>
+                          <h3 className="text-sm font-semibold text-slate-900">{displayStageName(currentStage, activeStage)}</h3>
                           <p className="mt-1 text-sm text-slate-500">{stageStatus(currentStage)}</p>
                           </div>
                         </div>

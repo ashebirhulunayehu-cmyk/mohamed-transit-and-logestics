@@ -44,6 +44,7 @@ type LoginPayload = Partial<IUser> & {
   response?: Record<string, unknown>;
   payload?: Record<string, unknown>;
   data?: Record<string, unknown>;
+  UserId?: string | number;
   userName?: string;
   roleName?: string;
 };
@@ -131,19 +132,19 @@ const extractUserPayload = (responseData: unknown): LoginPayload | null => {
 
       if (key === "data" || key === "payload") {
         const maybeUser = value as Record<string, unknown>;
-        if (maybeUser.user || maybeUser.role || maybeUser.roles || maybeUser.userRoles || maybeUser.email || maybeUser.username) {
+        if (maybeUser.user || maybeUser.role || maybeUser.roles || maybeUser.userRoles || maybeUser.email || maybeUser.username || maybeUser.userId || maybeUser.UserId) {
           return maybeUser as LoginPayload;
         }
       }
 
       const maybeUser = value as Record<string, unknown>;
-      if (maybeUser.user || maybeUser.role || maybeUser.roles || maybeUser.userRoles || maybeUser.email || maybeUser.username) {
+      if (maybeUser.user || maybeUser.role || maybeUser.roles || maybeUser.userRoles || maybeUser.email || maybeUser.username || maybeUser.userId || maybeUser.UserId) {
         return maybeUser as LoginPayload;
       }
     }
   }
 
-  if (candidate.email || candidate.username || candidate.role || candidate.roles || candidate.userRoles) {
+  if (candidate.email || candidate.username || candidate.role || candidate.roles || candidate.userRoles || candidate.userId || candidate.UserId) {
     return candidate as LoginPayload;
   }
 
@@ -156,7 +157,10 @@ const buildUserFromPayload = (payload: LoginPayload | null | undefined, fallback
   const firstRole = extractRoleName(roles);
 
   return {
-    id: (source.id as string | number | undefined) ?? "user-1",
+    id: (source.id as string | number | undefined)
+      ?? (source.userId as string | number | undefined)
+      ?? (source.UserId as string | number | undefined)
+      ?? "user-1",
     email: (source.email as string | undefined) ?? fallbackUsername ?? "",
     username: (source.username as string | undefined) ?? (source.userName as string | undefined) ?? fallbackUsername ?? "",
     firstName: (source.firstName as string | undefined) ?? "",

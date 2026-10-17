@@ -3,8 +3,11 @@ export type ShipmentParams = Record<string, unknown>;
 export type ShipmentPayload = Record<string, unknown>;
 
 export interface ShipmentServiceStageUpdatePayload {
+  stageExecutionId?: string | number | null;
   shipmentStageId?: string | number | null;
   shipmentId?: string | number | null;
+  userId?: string | number | null;
+  UserId?: string | number | null;
   status?: string | number | null;
   notes?: string | null;
   [key: string]: unknown;

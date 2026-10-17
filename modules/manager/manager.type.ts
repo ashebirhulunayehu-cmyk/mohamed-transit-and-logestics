@@ -104,6 +104,9 @@ export interface ManagerServiceMessage {
 
 export interface ManagerServiceStage {
   id?: number | string;
+  stageExecutionId?: number | string;
+  serviceStageExecutionId?: number | string;
+  executionId?: number | string;
   stageName?: string | null;
   name?: string | null;
   status?: number | string | null;
@@ -114,6 +117,7 @@ export interface ManagerServiceStage {
   completedAt?: string | null;
   notes?: string | null;
   comments?: string | null;
+  [key: string]: unknown;
 }
 
 export interface ManagerServiceDocument {

@@ -3,6 +3,7 @@
 import React, { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useShallow } from "zustand/react/shallow";
 import { useServiceStore } from "../service.store";
 import { useAssessorStore } from "@/modules/assessor/assessor.store";
 import type { ServiceColumn, ServiceRecord, ServiceStatus, RiskChannel } from "../service.types";
@@ -42,6 +43,7 @@ function ServiceRow({
   const [success, setSuccess] = useState(false);
   const addComplianceFeedback = useAssessorStore((state) => state.addComplianceFeedback);
   const serviceId = Number(row.shipmentId ?? row.id);
+  const managerServiceId = row.shipmentId && /^\d+$/.test(row.shipmentId) ? row.shipmentId : null;
   const canSubmit = Number.isInteger(serviceId) && serviceId > 0;
   const visibleColumnCount = visibleColumns.length;
 
@@ -64,16 +66,20 @@ function ServiceRow({
 
   return (
     <>
-      <tr className="hover:bg-slate-50/60 transition-colors">
-        {visibleColumns.includes("service") && <td className="py-3.5 px-4">
+      <tr className="transition-colors hover:bg-slate-50/60">
+        {visibleColumns.includes("service") && <td className={`px-4 ${managerView ? "py-4" : "py-3.5"}`}>
           <div className="flex items-center gap-2">
-            {managerView ? (
+            {managerView && managerServiceId ? (
               <Link
-                href={`/${lang}/admin/manager/services/${encodeURIComponent(row.shipmentId ?? row.id)}`}
+                href={`/${lang}/admin/manager/services/${encodeURIComponent(managerServiceId)}`}
                 className="font-semibold text-sky-700 hover:underline"
               >
                 {row.id}
               </Link>
+            ) : managerView ? (
+              <span className="font-semibold text-slate-500" title="A numeric service ID is required to open service details.">
+                {row.id}
+              </span>
             ) : (
               <Link
                 href={`/${lang}/admin/assessor/services/${encodeURIComponent(row.id)}`}
@@ -103,7 +109,7 @@ function ServiceRow({
             {row.title}
           </span>
         </td>}
-        {visibleColumns.includes("importer") && <td className="py-3.5 px-4">
+        {visibleColumns.includes("importer") && <td className={`px-4 ${managerView ? "py-4" : "py-3.5"}`}>
           <span className="font-semibold text-slate-800 block">
             {row.importerName}
           </span>
@@ -111,14 +117,14 @@ function ServiceRow({
             {row.importerCode}
           </span>
         </td>}
-        {visibleColumns.includes("mode") && <td className="py-3.5 px-4 text-slate-700 font-medium">{row.mode}</td>}
-        {visibleColumns.includes("status") && <td className="py-3.5 px-4">{renderStatusBadge(row.status)}</td>}
-        {visibleColumns.includes("risk") && <td className="py-3.5 px-4">{renderRiskBadge(row.riskChannel)}</td>}
-        {visibleColumns.includes("caseExecutor") && <td className="py-3.5 px-4 text-slate-800 font-medium">
+        {visibleColumns.includes("mode") && <td className={`px-4 font-medium text-slate-700 ${managerView ? "py-4" : "py-3.5"}`}>{row.mode}</td>}
+        {visibleColumns.includes("status") && <td className={`px-4 ${managerView ? "py-4" : "py-3.5"}`}>{renderStatusBadge(row.status)}</td>}
+        {visibleColumns.includes("risk") && <td className={`px-4 ${managerView ? "py-4" : "py-3.5"}`}>{renderRiskBadge(row.riskChannel)}</td>}
+        {visibleColumns.includes("caseExecutor") && <td className={`px-4 font-medium text-slate-800 ${managerView ? "py-4" : "py-3.5"}`}>
           {row.caseExecutor}
         </td>}
-        {visibleColumns.includes("eta") && <td className="py-3.5 px-4 text-slate-700">{row.eta}</td>}
-        {visibleColumns.includes("sla") && <td className="py-3.5 px-4">
+        {visibleColumns.includes("eta") && <td className={`px-4 text-slate-700 ${managerView ? "py-4" : "py-3.5"}`}>{row.eta}</td>}
+        {visibleColumns.includes("sla") && <td className={`px-4 ${managerView ? "py-4" : "py-3.5"}`}>
           <span
             className={`font-semibold ${
               row.isOverdue
@@ -131,7 +137,7 @@ function ServiceRow({
             {row.sla}
           </span>
         </td>}
-        {visibleColumns.includes("updated") && <td className="py-3.5 px-4 text-slate-400">{row.updated}</td>}
+        {visibleColumns.includes("updated") && <td className={`px-4 text-slate-400 ${managerView ? "py-4" : "py-3.5"}`}>{row.updated}</td>}
       </tr>
       {!managerView && formOpen && (
         <tr>
@@ -177,13 +183,12 @@ export function ServiceTable({
 } = {}) {
   const [updatedSort, setUpdatedSort] = useState<"asc" | "desc">("desc");
   const { lang } = useParams<{ lang: string }>();
-  const getFilteredServices = useServiceStore((state) => state.getFilteredServices);
+  const filteredData = useServiceStore(useShallow((state) => state.getFilteredServices()));
   const services = useServiceStore((state) => state.services);
   const visibleColumns = useServiceStore((state) => state.visibleColumns);
   const loading = useServiceStore((state) => state.loading);
   const error = useServiceStore((state) => state.error);
   const servicePagination = useManagerStore((state) => state.servicePagination);
-  const filteredData = getFilteredServices();
   const sortedData = [...filteredData].sort((a, b) => {
     const aTimestamp = a.updatedAtTimestamp ?? Number.NEGATIVE_INFINITY;
     const bTimestamp = b.updatedAtTimestamp ?? Number.NEGATIVE_INFINITY;
@@ -312,14 +317,14 @@ export function ServiceTable({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className={`overflow-hidden border border-slate-200 bg-white shadow-sm ${managerView ? "rounded-lg" : "rounded-xl"}`}>
       {error && (
         <p role="alert" className="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           {error}
         </p>
       )}
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
+        <table className={`w-full border-collapse text-left ${managerView ? "min-w-280" : ""}`}>
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               {visibleColumns.includes("service") && <th className="py-3 px-4">SERVICE</th>}
@@ -342,7 +347,7 @@ export function ServiceTable({
               </th>}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 text-xs">
+          <tbody className={`divide-y divide-slate-100 ${managerView ? "text-[13px]" : "text-xs"}`}>
             {loading && filteredData.length === 0 ? (
               <tr>
                 <td colSpan={visibleColumnCount} className="px-4 py-10 text-center text-sm text-slate-500">
@@ -378,7 +383,7 @@ export function ServiceTable({
       </div>
 
       {/* Pagination Footer */}
-      <div className="p-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+      <div className={`flex items-center justify-between border-t border-slate-100 p-4 text-slate-500 ${managerView ? "text-sm" : "text-xs"}`}>
         <span>
           {managerView
             ? `Page ${page} of ${Math.max(totalPages, 1)} · ${servicePagination.totalCount} services`
