@@ -11,16 +11,18 @@ import {
   IUser,
   ResetPasswordRequest,
   UpdateUserRequest,
+  
 } from "./auth.types";
 import {
   changePassword,
   forgotPassword,
+  getAccountProfile,
   login,
   logout,
   resetPassword,
   resetPasswordFromEmail,
   signup,
-  updateUser,
+  updateAccountProfile,
 } from "./auth.endpoint";
 
 const storedUser = typeof window !== "undefined" ? getUserData() : null;
@@ -35,6 +37,70 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message;
   return fallback;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const unwrapAccountProfile = (value: unknown): Record<string, unknown> => {
+  let current = value;
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (!isRecord(current)) {
+      throw new Error("The Account/GetProfile response did not contain a profile record.");
+    }
+    const nestedProfile = current.profile ?? current.user ?? current.account;
+    if (isRecord(nestedProfile)) {
+      current = nestedProfile;
+      continue;
+    }
+    const wrapper = current.data ?? current.payload ?? current.response ?? current.result;
+    if (wrapper !== undefined && wrapper !== current) {
+      current = wrapper;
+      continue;
+    }
+    return current;
+  }
+  throw new Error("The Account/GetProfile response nesting is invalid.");
+};
+
+const readProfileField = (
+  profile: Record<string, unknown>,
+  ...keys: string[]
+): unknown => {
+  for (const key of keys) {
+    const actualKey = Object.keys(profile).find(
+      (candidate) => candidate.toLowerCase() === key.toLowerCase(),
+    );
+    if (actualKey !== undefined) return profile[actualKey];
+  }
+  return undefined;
+};
+
+const readProfileText = (
+  profile: Record<string, unknown>,
+  ...keys: string[]
+): string | undefined => {
+  const value = readProfileField(profile, ...keys);
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    return text || undefined;
+  }
+  return undefined;
+};
+
+const readProfileRole = (value: unknown): string | undefined => {
+  if (typeof value === "string") return value.trim() || undefined;
+  if (Array.isArray(value)) {
+    const roles = value.flatMap((role) => {
+      const name = readProfileRole(role);
+      return name ? [name] : [];
+    });
+    return roles.length ? roles.join(", ") : undefined;
+  }
+  if (isRecord(value)) {
+    return readProfileText(value, "name", "roleName", "role");
+  }
+  return undefined;
 };
 
 type LoginPayload = Partial<IUser> & {
@@ -230,6 +296,50 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
+  refreshAccountProfile: async () => {
+    const currentUser = get().user;
+    if (!currentUser) {
+      throw new Error("Your account is unavailable. Sign in again before loading your profile.");
+    }
+
+    try {
+      const profile = unwrapAccountProfile(await getAccountProfile());
+      const fullName = readProfileText(profile, "fullName", "name");
+      const nameParts = fullName?.split(/\s+/).filter(Boolean) ?? [];
+      const profilePictureUrl = readProfileText(
+        profile,
+        "profilePictureUrl",
+        "profilePhotoUrl",
+        "profilePhoto",
+        "avatarUrl",
+      );
+      const user: IUser = {
+        ...currentUser,
+        id: readProfileText(profile, "userId", "id", "accountId") ?? currentUser.id,
+        firstName: readProfileText(profile, "firstName") ?? nameParts[0] ?? currentUser.firstName,
+        lastName:
+          readProfileText(profile, "lastName") ??
+          (nameParts.slice(1).join(" ") || currentUser.lastName),
+        email: readProfileText(profile, "email") ?? currentUser.email,
+        username: readProfileText(profile, "username", "userName") ?? currentUser.username,
+        phone: readProfileText(profile, "phone", "phoneNumber") ?? currentUser.phone ?? currentUser.phoneNumber,
+        branch: readProfileText(profile, "branch", "branchName") ?? currentUser.branch,
+        lastLoginDateTime:
+          readProfileText(profile, "lastLoginDateTime", "lastLogin", "lastSignInAt") ??
+          currentUser.lastLoginDateTime,
+        roleName: readProfileRole(readProfileField(profile, "roleName", "role", "roles")) ?? currentUser.roleName,
+        profilePhoto: profilePictureUrl ?? currentUser.profilePhoto,
+        profilePictureUrl: profilePictureUrl ?? currentUser.profilePictureUrl,
+      };
+      setUserData(user);
+      set({ user });
+      return user;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, "Unable to load your account profile.");
+      throw new Error(message);
+    }
+  },
+
   syncProfile: (payload: Partial<IUser>, options?: { persist?: boolean }) => {
     const currentUser = get().user;
     if (!currentUser) return;
@@ -247,7 +357,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
     set({ loading: true, error: null });
     try {
-      await updateUser({ ...payload, id: currentUser.id });
+      await updateAccountProfile({ ...payload, id: currentUser.id });
       const user: IUser = {
         ...currentUser,
         id: currentUser.id,

@@ -39,6 +39,7 @@ export interface ServiceRecord {
   shipmentId?: string;
   referenceNumber?: string;
   title: string;
+  commodity?: string;
   importerName: string;
   importerCode: string;
   mode: TransportMode;

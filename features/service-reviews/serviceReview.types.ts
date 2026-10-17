@@ -11,8 +11,9 @@ export interface EvidenceFile {
   serviceStageId?: string;
   name: string;
   type: string;
-  source: "Customer" | "Service";
+  source: "Customer" | "Service" | "Stage";
   description?: string;
+  stageDocumentId?: string;
   size?: string;
   mimeType?: string;
   isRequired: boolean;
@@ -53,6 +54,7 @@ export interface ServiceCase {
   currentStage: string;
   sla: string;
   status: string;
+  shipmentStatus: string;
   assignedHub: string;
   mode: string;
   declaredValue: string;

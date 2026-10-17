@@ -7,8 +7,13 @@ export const StatusBadge: React.FC<{ status: StatusType }> = ({ status }) => {
     switch (st.toLowerCase()) {
       case 'pending check':
       case 'pending':
-        return 'bg-amber-50 text-amber-700 border-amber-200/80 dot-amber-500';
+        return 'bg-sky-50 text-sky-700 border-sky-200/80 dot-sky-500';
       case 'flagged':
+        return 'bg-amber-50 text-amber-700 border-amber-200/80 dot-amber-500';
+      case 'returned for revision':
+        return 'bg-amber-50 text-amber-700 border-amber-200/80 dot-amber-500';
+      case 'expired':
+      case 'rejected':
         return 'bg-rose-50 text-rose-700 border-rose-200/80 dot-rose-500';
       case 'verified':
       case 'approved':

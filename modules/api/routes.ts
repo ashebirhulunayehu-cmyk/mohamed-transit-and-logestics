@@ -52,9 +52,12 @@ export const API_ROUTES = {
       `/Assessor/GetConsignmentDetails/${encodeURIComponent(String(serviceId))}`,
     getServiceStages: (serviceId: number | string) =>
       `/Assessor/GetServiceStages/${encodeURIComponent(String(serviceId))}`,
+    downloadStageDocument: "/Assessor/DownloadStageDocument",
+    downloadStageDocuments: "/Assessor/DownloadStageDocuments",
     getStageDiscussions: (serviceId: number | string, stageId: number | string) =>
       `/Assessor/GetStageDiscussions/${encodeURIComponent(String(serviceId))}/${encodeURIComponent(String(stageId))}`,
     addStageDiscussion: "/Assessor/AddStageDiscussion",
+    decideServiceStage: "/Assessor/DecideServiceStage",
     getAssessmentDocuments: "/Assessor/GetAssessmentDocuments",
     getActiveServicesForRegister: "/Assessor/GetActiveServicesForRegister",
     recordAssessment: "/Assessor/RecordAssessment",
@@ -87,7 +90,20 @@ export const API_ROUTES = {
   },
   caseExecutor: {
     getDashboard: "/CaseExecutor/GetDashboard",
+    getAssignedServices: "/CaseExecutor/GetAssignedServices",
     getAssignedServiceById: "/CaseExecutor/GetAssignedServiceById",
+    uploadAssignedServiceDocument: "/Document/UploadServiceDocument",
+    deleteAssignedDocument: "/CaseExecutor/DeleteAssignedDocument",
+    verifyAssignedDocument: "/CaseExecutor/VerifyAssignedDocument",
+    downloadAssignedDocument: "/CaseExecutor/DownloadAssignedDocument",
+    getMyActivity: "/CaseExecutor/GetMyActivity",
+    uploadStageDocument: "/CaseExecutor/UploadStageDocument",
+    addStageComment: "/CaseExecutor/AddStageComment",
+    setRiskLevel: "/CaseExecutor/SetRiskLevel",
+    blockStage: "/CaseExecutor/BlockStage",
+    updateAssignedStageStatus: "/CaseExecutor/UpdateAssignedStageStatus",
+    downloadStageDocument: "/CaseExecutor/DownloadStageDocument",
+    downloadStageDocuments: "/CaseExecutor/DownloadStageDocuments",
   },
   dataEncoder: {
     getDashboard: "/DataEncoder/GetDashboard",

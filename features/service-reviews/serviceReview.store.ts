@@ -17,6 +17,7 @@ interface ServiceReviewStore {
   cases: ServiceCase[];
   stats: ServiceReviewStats;
   loading: boolean;
+  casesLoaded: boolean;
   error: string | null;
   serviceDocuments: Record<string, EvidenceFile[]>;
   documentsLoading: boolean;
@@ -27,7 +28,7 @@ interface ServiceReviewStore {
   fetchCases: () => Promise<void>;
   fetchServiceDocuments: (serviceId: number) => Promise<void>;
   reviewCase: (payload: AssessorServiceReviewRequest) => Promise<AssessorReviewedService>;
-  setSelectedCaseId: (id: string) => void;
+  setSelectedCaseId: (id: string | null) => void;
   setSearchTerm: (term: string) => void;
   getSelectedCase: () => ServiceCase | undefined;
 }
@@ -66,6 +67,9 @@ const unwrapList = (value: unknown): Record<string, unknown>[] => {
     "records",
     "rows",
     "services",
+    "activeServices",
+    "activeServiceList",
+    "activeServiceRecords",
     "pendingServices",
     "pendingServiceReviews",
     "pendingServiceReviewList",
@@ -318,6 +322,13 @@ const normalizeService = (record: Record<string, unknown>): ServiceCase | null =
     8: "Cancelled",
     9: "Delivered",
   });
+  const reviewStatus = readField(record, "hasBlockedStage") === true
+    ? "Blocked"
+    : readField(record, "hasCustomerAction") === true
+      ? "Requires customer action"
+      : readField(record, "hasNeedsReview") === true
+        ? "Needs review"
+        : shipmentStatus;
   const rawDeclaredValue = readField(record, "declaredValue");
   const declaredValue =
     typeof rawDeclaredValue === "number" || typeof rawDeclaredValue === "string"
@@ -396,7 +407,8 @@ const normalizeService = (record: Record<string, unknown>): ServiceCase | null =
         (typeof currentStageValue === "string" ? currentStageValue : "Not recorded"),
     ),
     sla,
-    status: shipmentStatus,
+    status: reviewStatus,
+    shipmentStatus,
     assignedHub: formatEnum(rawHub, { 1: "Djibouti", 2: "Mojo", 3: "Adama" }),
     mode: formatEnum(rawMode, { 1: "Multimodal sea/rail", 2: "Unimodal road" }),
     declaredValue,
@@ -422,10 +434,8 @@ const emptyStats: ServiceReviewStats = {
 const getServiceReviewStats = (cases: ServiceCase[]): ServiceReviewStats => ({
   awaitingReview: cases.length,
   redChannel: cases.filter((item) => item.channel === "Red channel").length,
-  submittedForReview: cases.filter((item) =>
-    ["submitted", "under review", "pending review", "needs review"].includes(
-      item.status.toLowerCase(),
-    ),
+  submittedForReview: cases.filter(
+    (item) => item.shipmentStatus.toLowerCase() === "submitted",
   ).length,
 });
 
@@ -433,6 +443,7 @@ export const useServiceReviewStore = create<ServiceReviewStore>((set, get) => ({
   cases: [],
   stats: emptyStats,
   loading: false,
+  casesLoaded: false,
   error: null,
   reviewedService: null,
   selectedCaseId: null,
@@ -443,16 +454,26 @@ export const useServiceReviewStore = create<ServiceReviewStore>((set, get) => ({
   fetchCases: async () => {
     set({ loading: true, error: null });
     try {
-      const response = await AssessorEndpoints.getPendingServiceReviews();
+      const response = await AssessorEndpoints.getActiveServicesForRegister();
       const cases = unwrapList(response)
         .map(normalizeService)
-        .filter((item): item is ServiceCase => item !== null);
+        .filter(
+          (item): item is ServiceCase =>
+            item !== null &&
+            (item.shipmentStatus.toLowerCase() === "submitted" ||
+              item.status === "Needs review" ||
+              item.status === "Blocked" ||
+              item.status === "Requires customer action"),
+        );
 
       set({
         cases,
-        selectedCaseId: cases[0]?.id ?? null,
+        selectedCaseId: cases.some((item) => item.id === get().selectedCaseId)
+          ? get().selectedCaseId
+          : cases[0]?.id ?? null,
         stats: getServiceReviewStats(cases),
         loading: false,
+        casesLoaded: true,
       });
     } catch (error: unknown) {
       set({
@@ -523,7 +544,7 @@ export const useServiceReviewStore = create<ServiceReviewStore>((set, get) => ({
       throw error;
     }
   },
-  setSelectedCaseId: (id: string) => set({ selectedCaseId: id }),
+  setSelectedCaseId: (id: string | null) => set({ selectedCaseId: id }),
   setSearchTerm: (term: string) => set({ searchTerm: term }),
   getSelectedCase: () => {
     const { cases, selectedCaseId } = get();

@@ -7,12 +7,14 @@ import { AssessorEndpoints } from "@/modules/assessor/assessor.endpoint";
 
 interface StageEvidenceProps {
   files: EvidenceFile[];
+  serviceId?: number | null;
   loading?: boolean;
   error?: string | null;
 }
 
 export function StageEvidence({
   files,
+  serviceId,
   loading = false,
   error = null,
 }: StageEvidenceProps) {
@@ -45,12 +47,19 @@ export function StageEvidence({
   };
 
   const handleDownload = async (file: EvidenceFile) => {
-    if (!file.documentId) return;
+    if (file.source === "Stage" && (!serviceId || !file.serviceStageId || !file.stageDocumentId)) return;
+    if (file.source !== "Stage" && !file.documentId) return;
     setDownloadingId(file.id);
     setDownloadError(null);
 
     try {
-      const response: unknown = await AssessorEndpoints.downloadDocument(file.documentId);
+      const response: unknown = file.source === "Stage"
+        ? await AssessorEndpoints.downloadStageDocument(
+            serviceId!,
+            file.serviceStageId!,
+            file.stageDocumentId!,
+          )
+        : await AssessorEndpoints.downloadDocument(file.documentId!);
       const blob = getResponseBlob(response);
       if (!blob) throw new Error("The document endpoint did not return a file.");
       saveBlob(blob, file.name);
@@ -63,17 +72,41 @@ export function StageEvidence({
 
   const handleDownloadAll = async () => {
     const documentIds = files.flatMap((file) =>
-      file.documentId ? [file.documentId] : [],
+      file.source === "Service" && file.documentId ? [file.documentId] : [],
     );
-    if (!documentIds.length) return;
+    const stageFiles = files.filter((file) =>
+      file.source === "Stage" && file.stageDocumentId && file.serviceStageId,
+    );
+    if (!documentIds.length && !stageFiles.length) return;
 
     setDownloadingAll(true);
     setDownloadError(null);
     try {
-      const response: unknown = await AssessorEndpoints.downloadDocuments(documentIds);
-      const blob = getResponseBlob(response);
-      if (!blob) throw new Error("The document endpoint did not return a file.");
-      saveBlob(blob, "service-documents.zip");
+      if (documentIds.length) {
+        const response: unknown = await AssessorEndpoints.downloadDocuments(documentIds);
+        const blob = getResponseBlob(response);
+        if (!blob) throw new Error("The service-document endpoint did not return a file.");
+        saveBlob(blob, "service-documents.zip");
+      }
+      if (stageFiles.length) {
+        if (!serviceId) throw new Error("A valid service ID is required to download stage documents.");
+        const stageIds = new Set(stageFiles.map((file) => file.serviceStageId));
+        for (const stageId of stageIds) {
+          const documentIdsForStage = stageFiles.flatMap((file) =>
+            file.serviceStageId === stageId && file.stageDocumentId
+              ? [file.stageDocumentId]
+              : [],
+          );
+          const response: unknown = await AssessorEndpoints.downloadStageDocuments(
+            serviceId,
+            stageId!,
+            documentIdsForStage,
+          );
+          const blob = getResponseBlob(response);
+          if (!blob) throw new Error("The stage-document endpoint did not return a file.");
+          saveBlob(blob, "stage-documents.zip");
+        }
+      }
     } catch (error: unknown) {
       setDownloadError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -87,7 +120,7 @@ export function StageEvidence({
         <div>
           <h3 className="text-sm font-bold text-slate-900">Stage evidence</h3>
           <p className="mt-1 text-xs text-slate-500">
-            Customer and service documents associated with this shipment. A download is available only for service documents.
+            Customer, service, and stage documents associated with this shipment.
           </p>
         </div>
         <button
@@ -97,7 +130,10 @@ export function StageEvidence({
             downloadingAll ||
             downloadingId !== null ||
             files.length === 0 ||
-            !files.some((file) => file.documentId)
+            !files.some((file) =>
+              (file.source === "Service" && file.documentId) ||
+              (file.source === "Stage" && file.stageDocumentId && file.serviceStageId),
+            )
           }
           className="inline-flex shrink-0 items-center gap-2 rounded border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -151,11 +187,19 @@ export function StageEvidence({
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <FileText aria-hidden="true" className="w-4 h-4 text-slate-400" />
-              {file.source === "Service" && <button
+              {file.source !== "Customer" && <button
                 type="button"
                 onClick={() => void handleDownload(file)}
-                disabled={!file.documentId || downloadingId !== null || downloadingAll}
-                title={file.documentId ? `Download ${file.name}` : "Document ID unavailable"}
+                disabled={
+                  file.source === "Stage"
+                    ? !file.stageDocumentId || !file.serviceStageId || !serviceId || downloadingId !== null || downloadingAll
+                    : !file.documentId || downloadingId !== null || downloadingAll
+                }
+                title={
+                  file.source === "Stage"
+                    ? file.stageDocumentId ? `Download ${file.name}` : "Document ID unavailable"
+                    : file.documentId ? `Download ${file.name}` : "Document ID unavailable"
+                }
                 aria-label={`Download ${file.name}`}
                 className="rounded p-1.5 text-slate-500 transition hover:bg-slate-200 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
               >

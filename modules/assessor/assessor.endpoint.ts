@@ -10,6 +10,7 @@ import type {
   EscalateServiceRequest,
   NotifyImporterRequest,
   RecordAssessmentRequest,
+  ServiceStageDecisionRequest,
   VerifyCustomerDocumentRequest,
 } from "./assessor.type";
 
@@ -23,14 +24,55 @@ export const AssessorEndpoints = {
     service.get(API_ROUTES.assessor.getPendingServiceReviews),
   getServiceDetails: (serviceId: number | string) =>
     service.get(API_ROUTES.assessor.getServiceDetails(serviceId)),
-  getConsignmentDetails: (serviceId: number | string) =>
-    service.get(API_ROUTES.assessor.getConsignmentDetails(serviceId)),
-  getServiceStages: (serviceId: number | string) =>
-    service.get(API_ROUTES.assessor.getServiceStages(serviceId)),
+  getConsignmentDetails: (serviceId: number | string) => {
+    const id = String(serviceId).trim();
+    if (!/^[1-9]\d*$/.test(id)) {
+      throw new Error("A valid service ID is required to load Assessor consignment details.");
+    }
+    return service.get(API_ROUTES.assessor.getConsignmentDetails(id));
+  },
+  getServiceStages: (serviceId: number | string) => {
+    const id = String(serviceId).trim();
+    if (!/^[1-9]\d*$/.test(id)) {
+      throw new Error("A valid service ID is required to load Assessor workflow stages.");
+    }
+    return service.get(API_ROUTES.assessor.getServiceStages(id));
+  },
+  downloadStageDocument: (
+    serviceId: number | string,
+    stageId: number | string,
+    documentId: number | string,
+  ) => {
+    const ids = [serviceId, stageId, documentId].map((value) => String(value).trim());
+    if (ids.some((id) => !/^[1-9]\d*$/.test(id))) {
+      throw new Error("Valid service, stage, and document IDs are required.");
+    }
+    return service.get(API_ROUTES.assessor.downloadStageDocument, {
+      params: { serviceId: ids[0], stageId: ids[1], documentId: ids[2] },
+      responseType: "blob",
+    });
+  },
+  downloadStageDocuments: (
+    serviceId: number | string,
+    stageId: number | string,
+    documentIds: Array<number | string>,
+  ) => {
+    const ids = [serviceId, stageId, ...documentIds].map((value) => String(value).trim());
+    if (ids.some((id) => !/^[1-9]\d*$/.test(id))) {
+      throw new Error("Valid service, stage, and document IDs are required.");
+    }
+    return service.post(
+      API_ROUTES.assessor.downloadStageDocuments,
+      { serviceId: ids[0], stageId: ids[1], documentIds: ids.slice(2) },
+      { responseType: "blob" },
+    );
+  },
   getStageDiscussions: (serviceId: number | string, stageId: number | string) =>
     service.get(API_ROUTES.assessor.getStageDiscussions(serviceId, stageId)),
   addStageDiscussion: (payload: AddStageDiscussionRequest) =>
     service.post(API_ROUTES.assessor.addStageDiscussion, payload),
+  decideServiceStage: (payload: ServiceStageDecisionRequest) =>
+    service.post(API_ROUTES.assessor.decideServiceStage, payload),
 
   // 2. Approve Customer
   approveCustomer: async (

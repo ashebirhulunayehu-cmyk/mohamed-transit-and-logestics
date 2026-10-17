@@ -5,7 +5,7 @@ interface StatsProps {
   stats: {
     awaitingDecision: number;
     returnedForRevision: number;
-    verifiedImporters: number;
+    verifiedImporters: number | string;
     medianDecisionTime: string;
   };
 }

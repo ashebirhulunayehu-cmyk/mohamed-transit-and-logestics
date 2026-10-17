@@ -2,6 +2,7 @@
 import http from "@/modules/utils/axios/index";
 import { API_ROUTES } from "@/modules/api";
 import { normalizeApiBaseUrl } from "@/modules/utils/axios/config";
+import { getTokenClient } from "@/modules/utils/token/client-token.storage";
 import type {
   ChangePasswordRequest,
   EmailResetPasswordRequest,
@@ -81,8 +82,60 @@ export const loginUser = (payload: LoginUserRequest): Promise<LoginResponse> =>
 export const logout = (): Promise<AuthResponse> =>
   http.post({ url: authEndpoints.logout, data: {} });
 
+export const getAccountProfile = async (): Promise<unknown> => {
+  const accessToken = getTokenClient();
+  const response = await fetch("/api/account/profile", {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+  });
+  const text = await response.text();
+  let body: unknown = null;
+
+  if (text) {
+    try {
+      body = JSON.parse(text) as unknown;
+    } catch {
+      if (response.ok) {
+        throw new Error("The Account/GetProfile endpoint returned invalid JSON.");
+      }
+      body = text;
+    }
+  }
+
+  if (!response.ok) {
+    if (typeof body === "string" && body.trim()) throw new Error(body);
+    if (typeof body === "object" && body !== null && !Array.isArray(body)) {
+      const record = body as Record<string, unknown>;
+      const message = [record.message, record.detail, record.error, record.title].find(
+        (value): value is string => typeof value === "string" && Boolean(value.trim()),
+      );
+      if (message) throw new Error(message);
+    }
+    throw new Error(`Account profile request failed (${response.status}).`);
+  }
+
+  return body;
+};
+
 export const updateUser = (payload: UpdateUserRequest): Promise<unknown> =>
   http.put({ url: API_ROUTES.auth.user.update, data: payload });
+
+export const updateAccountProfile = (payload: UpdateUserRequest): Promise<unknown> => {
+  const formData = new FormData();
+  formData.set("FirstName", payload.firstName ?? "");
+  formData.set("LastName", payload.lastName ?? "");
+  formData.set("Phone", payload.phone ?? "");
+  formData.set("Username", payload.username ?? "");
+  formData.set("Email", payload.email ?? "");
+  if (payload.profileFile) {
+    formData.set("ProfilePhotoFile", payload.profileFile);
+  }
+
+  return http.put({ url: API_ROUTES.account.updateProfile, data: formData });
+};
 
 export const forgotPassword = (payload: ForgotPasswordRequest): Promise<AuthResponse> =>
   http.post({ url: authEndpoints.forgotPassword, data: payload });

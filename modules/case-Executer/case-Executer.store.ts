@@ -60,6 +60,24 @@ const normalizeService = (value: unknown): CaseExecutorServiceRecord | null => {
 	return value;
 };
 
+const normalizeServices = (value: unknown): CaseExecutorServiceRecord[] | null => {
+	if (Array.isArray(value)) {
+		return value.flatMap((item) => {
+			const service = normalizeService(item);
+			return service ? [service] : [];
+		});
+	}
+	if (!isRecord(value)) return null;
+
+	for (const key of ["response", "data", "payload", "services", "assignedServices"]) {
+		if (key in value && value[key] !== undefined && value[key] !== null) {
+			const nested = normalizeServices(value[key]);
+			if (nested) return nested;
+		}
+	}
+	return null;
+};
+
 const getErrorMessage = (error: unknown, fallback: string): string =>
 	typeof error === "string"
 		? error
@@ -71,6 +89,9 @@ export const useCaseExecutorStore = create<CaseExecutorState>((set, get) => ({
 	dashboard: null,
 	dashboardLoading: true,
 	dashboardError: null,
+	assignedServices: [],
+	assignedServicesLoading: true,
+	assignedServicesError: null,
 	assignedService: null,
 	assignedServiceId: null,
 	assignedServiceLoading: false,
@@ -87,6 +108,28 @@ export const useCaseExecutorStore = create<CaseExecutorState>((set, get) => ({
 				dashboard: null,
 				dashboardLoading: false,
 				dashboardError: getErrorMessage(error, "Unable to load Case Executor dashboard."),
+			});
+		}
+	},
+
+	fetchAssignedServices: async () => {
+		set({ assignedServicesLoading: true, assignedServicesError: null });
+		try {
+			const assignedServices = normalizeServices(
+				await CaseExecutorEndpoints.getAssignedServices(),
+			);
+			if (!assignedServices) {
+				throw new Error("Assigned services were not returned in the expected format.");
+			}
+			set({ assignedServices, assignedServicesLoading: false, assignedServicesError: null });
+		} catch (error: unknown) {
+			set({
+				assignedServices: [],
+				assignedServicesLoading: false,
+				assignedServicesError: getErrorMessage(
+					error,
+					"Unable to load assigned services.",
+				),
 			});
 		}
 	},

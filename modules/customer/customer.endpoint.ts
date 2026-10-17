@@ -1,5 +1,6 @@
 import { service } from "@/modules/utils/axios/service";
 import { API_ROUTES } from "@/modules/api";
+import { getAccountProfile } from "@/modules/auth/auth.endpoint";
 import type {
   CustomerCreateServicePayload,
   CustomerRegisterPayload,
@@ -10,39 +11,7 @@ export const customerEndpoints = {
   registerCustomer: (payload: CustomerRegisterPayload) =>
     service.post(API_ROUTES.customer.register, payload),
   getProfile: () => service.get(API_ROUTES.customer.getProfile),
-  getAccountProfile: async (): Promise<unknown> => {
-    const response = await fetch("/api/customer/account-profile", {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    const text = await response.text();
-    let body: unknown = null;
-
-    if (text) {
-      try {
-        body = JSON.parse(text) as unknown;
-      } catch {
-        if (response.ok) {
-          throw new Error("The Account/GetProfile endpoint returned invalid JSON.");
-        }
-        body = text;
-      }
-    }
-
-    if (!response.ok) {
-      if (typeof body === "string" && body.trim()) throw new Error(body);
-      if (typeof body === "object" && body !== null && !Array.isArray(body)) {
-        const record = body as Record<string, unknown>;
-        const message = [record.message, record.detail, record.error, record.title].find(
-          (value): value is string => typeof value === "string" && Boolean(value.trim()),
-        );
-        if (message) throw new Error(message);
-      }
-      throw new Error(`Account profile request failed (${response.status}).`);
-    }
-
-    return body;
-  },
+  getAccountProfile,
   updateProfile: (payload: CustomerUpdateProfilePayload) =>
     service.put(API_ROUTES.customer.updateProfile, payload),
   getNotifications: () => service.get(API_ROUTES.customer.getNotifications),

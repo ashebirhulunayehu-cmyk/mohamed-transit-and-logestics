@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 import { LockKeyhole } from "lucide-react";
 import useAuthStore from "@/modules/auth/auth.store";
+
+const subscribeToHydration = () => () => {};
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
 
 const formatLastLogin = (value?: string): string | null => {
   if (!value) return null;
@@ -18,18 +22,41 @@ const formatLastLogin = (value?: string): string | null => {
 export default function ProfilePage() {
   const user = useAuthStore((state) => state.user);
   const updatePassword = useAuthStore((state) => state.updatePassword);
+  const refreshAccountProfile = useAuthStore((state) => state.refreshAccountProfile);
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  );
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [changingPassword, setChangingPassword] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
-  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(" ")
-    || user?.username
+  const displayedUser = hydrated ? user : null;
+  const fullName = [displayedUser?.firstName, displayedUser?.lastName].filter(Boolean).join(" ")
+    || displayedUser?.username
     || "Not provided";
-  const role = user?.roleName
-    || user?.roles?.map((item) => typeof item === "string" ? item : item.roleName).filter(Boolean).join(", ")
+  const role = displayedUser?.roleName
+    || displayedUser?.roles?.map((item) => typeof item === "string" ? item : item.roleName).filter(Boolean).join(", ")
     || "Not provided";
-  const lastLogin = formatLastLogin(user?.lastLoginDateTime);
+  const lastLogin = formatLastLogin(displayedUser?.lastLoginDateTime);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    let active = true;
+    void refreshAccountProfile().catch((error: unknown) => {
+      if (active) {
+        setProfileError(
+          error instanceof Error ? error.message : "Unable to load your account profile.",
+        );
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [hydrated, refreshAccountProfile]);
 
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -68,6 +95,11 @@ export default function ProfilePage() {
         <p className="mt-1 text-sm text-slate-500">{role}</p>
       </header>
 
+      {profileError && (
+        <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          {profileError}
+        </p>
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <h2 className="text-base font-bold text-slate-900">Account details</h2>
@@ -80,28 +112,28 @@ export default function ProfilePage() {
               <dt className="text-sm text-slate-500">Role</dt>
               <dd className="text-right text-sm font-semibold text-slate-900">{role}</dd>
             </div>
-            {user?.email && (
+            {displayedUser?.email && (
               <div className="flex items-start justify-between gap-4 py-3">
                 <dt className="text-sm text-slate-500">Email</dt>
-                <dd className="break-all text-right text-sm font-semibold text-slate-900">{user.email}</dd>
+                <dd className="break-all text-right text-sm font-semibold text-slate-900">{displayedUser.email}</dd>
               </div>
             )}
-            {user?.username && (
+            {displayedUser?.username && (
               <div className="flex items-start justify-between gap-4 py-3">
                 <dt className="text-sm text-slate-500">Username</dt>
-                <dd className="text-right text-sm font-semibold text-slate-900">{user.username}</dd>
+                <dd className="text-right text-sm font-semibold text-slate-900">{displayedUser.username}</dd>
               </div>
             )}
-            {(user?.phone || user?.phoneNumber) && (
+            {(displayedUser?.phone || displayedUser?.phoneNumber) && (
               <div className="flex items-start justify-between gap-4 py-3">
                 <dt className="text-sm text-slate-500">Phone</dt>
-                <dd className="text-right text-sm font-semibold text-slate-900">{user.phone || user.phoneNumber}</dd>
+                <dd className="text-right text-sm font-semibold text-slate-900">{displayedUser.phone || displayedUser.phoneNumber}</dd>
               </div>
             )}
-            {user?.id !== undefined && user.id !== null && (
+            {displayedUser?.id !== undefined && displayedUser.id !== null && (
               <div className="flex items-start justify-between gap-4 py-3">
                 <dt className="text-sm text-slate-500">User ID</dt>
-                <dd className="text-right text-sm font-semibold text-slate-900">{user.id}</dd>
+                <dd className="text-right text-sm font-semibold text-slate-900">{displayedUser.id}</dd>
               </div>
             )}
           </dl>
@@ -204,7 +236,7 @@ export default function ProfilePage() {
           {lastLogin ? (
             <div className="mt-4 flex flex-col gap-1 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-slate-700">Last sign-in</p>
-              <time className="text-sm text-slate-500" dateTime={user?.lastLoginDateTime}>
+              <time className="text-sm text-slate-500" dateTime={displayedUser?.lastLoginDateTime}>
                 {lastLogin}
               </time>
             </div>

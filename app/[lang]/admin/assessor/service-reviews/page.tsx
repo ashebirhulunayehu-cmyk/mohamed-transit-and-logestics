@@ -14,7 +14,7 @@ export default function ServiceReviewsPage() {
         </span>
         <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Service reviews</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 sm:text-base">
-          Cases submitted for assessment sign-off, ordered by risk channel and time in stage.
+          Submitted cases and active services flagged for assessor attention, ordered by risk channel and time in stage.
         </p>
       </div>
 

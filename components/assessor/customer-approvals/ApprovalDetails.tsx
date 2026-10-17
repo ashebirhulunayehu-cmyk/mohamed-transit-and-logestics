@@ -179,9 +179,9 @@ export function ApprovalDetails({
       {/* KYC Document Checklist Card */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
         <div className="mb-4">
-          <h3 className="text-base font-semibold text-slate-900">Customer documents</h3>
+          <h3 className="text-base font-semibold text-slate-900">KYC document checklist</h3>
           <p className="text-xs text-slate-500">
-            Approval is blocked while an active document is unverified or expired.
+            All active documents must be verified and unexpired before approval.
           </p>
         </div>
 
@@ -191,60 +191,67 @@ export function ApprovalDetails({
           </p>
         ) : (
           <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-100">
-            {applicant.checklist.map((item) => (
-              <div key={item.id} className="space-y-3 bg-white p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                      <FileText aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
-                      <span className="break-all">{item.name}</span>
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {item.documentType}
-                      {item.isRequired ? " · Required by record" : " · Not marked required"}
-                    </p>
+            {applicant.checklist.map((item) => {
+              const numericDocumentId = Number(item.id);
+              const hasDocumentId =
+                Number.isSafeInteger(numericDocumentId) && numericDocumentId > 0;
+              return (
+                <div key={item.id} className="space-y-3 bg-white p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                        <FileText aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
+                        <span className="break-all">{item.name}</span>
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {item.documentType}
+                        {item.isRequired ? " · Required by record" : " · Not marked required"}
+                      </p>
+                    </div>
+                    <div>{getStatusBadge(item.status)}</div>
                   </div>
-                  <div>{getStatusBadge(item.status)}</div>
-                </div>
-                <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
-                  <p>Submitted: {item.submittedAt ? new Date(item.submittedAt).toLocaleString() : "Not recorded"}</p>
-                  <p>Expiry: {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : "Not recorded"}</p>
-                </div>
-                {item.verificationNotes && (
-                  <p className="rounded bg-slate-50 p-2 text-xs text-slate-600">
-                    Verification note: {item.verificationNotes}
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap gap-2">
-                    {onDownloadDocument && (
-                      <button
-                        type="button"
-                        onClick={() => onDownloadDocument(item.id, item.name)}
-                        disabled={documentDownloadId === item.id}
-                        className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
-                      >
-                        {documentDownloadId === item.id ? "Downloading…" : "Download file"}
-                      </button>
-                    )}
-                    {onVerifyDocument && !item.isExpired && (
-                      <button
-                        type="button"
-                        onClick={() => onVerifyDocument(item.id, !item.isVerified, note)}
-                        disabled={actionLoading || documentActionId === item.id}
-                        className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
-                      >
-                        {documentActionId === item.id
-                          ? "Saving…"
-                          : item.isVerified
-                            ? "Mark unverified"
-                            : "Mark verified"}
-                      </button>
-                    )}
+                  <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                    <p>Submitted: {item.submittedAt ? new Date(item.submittedAt).toLocaleString() : "Not recorded"}</p>
+                    <p>Expiry: {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : "Not recorded"}</p>
+                  </div>
+                  {item.verificationNotes && (
+                    <p className="rounded bg-slate-50 p-2 text-xs text-slate-600">
+                      Verification note: {item.verificationNotes}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {onDownloadDocument && (
+                        <button
+                          type="button"
+                          onClick={() => onDownloadDocument(item.id, item.name)}
+                          disabled={!hasDocumentId || documentDownloadId === item.id}
+                          title={!hasDocumentId ? "This document has no valid backend ID." : undefined}
+                          className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
+                        >
+                          {documentDownloadId === item.id ? "Downloading…" : "Download file"}
+                        </button>
+                      )}
+                      {onVerifyDocument && !item.isExpired && (
+                        <button
+                          type="button"
+                          onClick={() => onVerifyDocument(item.id, !item.isVerified, note)}
+                          disabled={!hasDocumentId || actionLoading || documentActionId === item.id}
+                          title={!hasDocumentId ? "This document has no valid backend ID." : undefined}
+                          className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
+                        >
+                          {documentActionId === item.id
+                            ? "Saving…"
+                            : item.isVerified
+                              ? "Mark unverified"
+                              : "Mark verified"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

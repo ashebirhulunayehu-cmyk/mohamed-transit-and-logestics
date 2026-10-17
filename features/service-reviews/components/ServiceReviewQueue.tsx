@@ -1,7 +1,6 @@
 "use client";
 
-import React from "react";
-import { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useServiceReviewStore } from "../serviceReview.store";
 import { Search, RefreshCw, ShieldAlert } from "lucide-react";
 
@@ -66,14 +65,28 @@ export function ServiceReviewQueue() {
     void fetchCases();
   }, [fetchCases]);
 
-  const filteredCases = cases.filter(
-    (c) =>
-      c.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.trackingNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.importer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.route.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCases = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return cases;
+    return cases.filter((item) =>
+      [
+        item.id,
+        item.trackingNumber,
+        item.title,
+        item.commodity,
+        item.importer,
+        item.route,
+        item.currentStage,
+        item.status,
+        item.channel,
+      ].some((value) => value.toLowerCase().includes(query)),
+    );
+  }, [cases, searchTerm]);
+
+  useEffect(() => {
+    if (filteredCases.some((item) => item.id === selectedCaseId)) return;
+    setSelectedCaseId(filteredCases[0]?.id ?? null);
+  }, [filteredCases, selectedCaseId, setSelectedCaseId]);
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
@@ -89,7 +102,7 @@ export function ServiceReviewQueue() {
             type="button"
             onClick={() => void fetchCases()}
             disabled={loading}
-            aria-label="Refresh pending service reviews"
+            aria-label="Refresh assessor service reviews"
             className="inline-flex shrink-0 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -133,8 +146,8 @@ export function ServiceReviewQueue() {
           <p className="p-5 text-sm text-slate-500">Loading service reviews...</p>
         ) : filteredCases.length === 0 ? (
           <div className="p-5 text-sm text-slate-500">
-            <p>{cases.length ? "No cases match your search." : "No pending service reviews were returned by the Assessor API."}</p>
-            {!cases.length && <p className="mt-1 text-xs text-slate-400">Submitted services appear here after the backend marks them ready for assessment.</p>}
+            <p>{cases.length ? "No cases match your search." : "No services requiring assessor review were returned by the Assessor API."}</p>
+            {!cases.length && <p className="mt-1 text-xs text-slate-400">Submitted services and active services flagged for review, customer action, or blocking appear here.</p>}
           </div>
         ) : filteredCases.map((item) => {
           const isSelected = selectedCaseId === item.id;

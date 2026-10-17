@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
+import { useEffect, useSyncExternalStore } from "react";
 import {
   LayoutDashboard,
   UserCheck,
@@ -9,25 +10,31 @@ import {
   BriefcaseBusiness,
   FileText,
   History,
+  Layers,
+  ShieldAlert,
   MessageSquare,
   Bell,
   UserCircle,
-  ChevronDown,
   LogOut,
 } from "lucide-react";
-import { useState } from "react";
 import { useAssessorStore } from "@/store/assessorStore";
-import { useAuthStore } from "@/store/useAuthStore";
-import { AuthService } from "@/services/auth.service";
+import { useAuthStore as useLegacyAuthStore } from "@/store/useAuthStore";
+import useAuthStore from "@/modules/auth/auth.store";
+import { useCaseExecutorStore } from "@/modules/case-Executer/case-Executer.store";
+import { useMessagingStore } from "@/modules/message/message.store";
+import { useNotificationStore } from "@/features/notifications/notification.store";
 
-export type PrototypeRole = 
-  | "customer" 
-  | "manager" 
-  | "case_executor" 
-  | "assessor" 
-  | "data_encoder";
+const subscribeToHydration = () => () => {};
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
+const subscribeToHashChange = (callback: () => void) => {
+  window.addEventListener("hashchange", callback);
+  return () => window.removeEventListener("hashchange", callback);
+};
+const getClientHash = () => window.location.hash;
+const getServerHash = () => "";
 
-const assessmentItems = [
+const reviewQueueItems = [
   {
     label: "Customer Approvals",
     href: "/admin/assessor/customer-approvals",
@@ -38,6 +45,9 @@ const assessmentItems = [
     href: "/admin/assessor/service-reviews",
     icon: ClipboardCheck,
   },
+];
+
+const recordsItems = [
   {
     label: "Services",
     href: "/admin/assessor/services",
@@ -79,44 +89,51 @@ const accountItems = [
 const caseExecutorItems = [
   {
     label: "Assigned Services",
-    href: "/admin/case-Executer#assigned-service",
+    href: "/admin/case-Executer/services",
     icon: BriefcaseBusiness,
+    group: "today",
   },
   {
-    label: "Today's Tasks",
-    href: "/admin/case-Executer#todays-tasks",
-    icon: ClipboardCheck,
+    label: "Service Categories",
+    href: "/admin/case-Executer/service-catagory",
+    icon: Layers,
+    group: "today",
   },
   {
-    label: "Urgent Notifications",
-    href: "/admin/case-Executer#urgent-notifications",
+    label: "Documents",
+    href: "/admin/case-Executer/documents",
+    icon: FileText,
+    group: "work",
+  },
+  {
+    label: "Risk & Compliance",
+    href: "/admin/case-Executer/risk&compliance",
+    icon: ShieldAlert,
+    group: "work",
+  },
+  {
+    label: "Activity Log",
+    href: "/admin/case-Executer/activity",
+    icon: History,
+    group: "work",
+  },
+  {
+    label: "Messages",
+    href: "/admin/case-Executer/messages",
+    icon: MessageSquare,
+    group: "communication",
+  },
+  {
+    label: "Notifications",
+    href: "/admin/case-Executer/notifications",
     icon: Bell,
-  },
-];
-
-const roles: {
-  value: PrototypeRole;
-  label: string;
-}[] = [
-  {
-    value: "customer",
-    label: "Customer / Importer",
+    group: "communication",
   },
   {
-    value: "manager",
-    label: "Manager / Administrator",
-  },
-  {
-    value: "case_executor",
-    label: "Case Executor",
-  },
-  {
-    value: "assessor",
-    label: "Assessor",
-  },
-  {
-    value: "data_encoder",
-    label: "Data Encoder",
+    label: "Profile",
+    href: "/admin/case-Executer/profile",
+    icon: UserCircle,
+    group: "account",
   },
 ];
 
@@ -125,36 +142,99 @@ export default function AssessorSidebar() {
   const params = useParams();
   const lang = (params.lang as string) || "en";
   const router = useRouter();
+  const authReady = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  );
+  const currentHash = useSyncExternalStore(
+    subscribeToHashChange,
+    getClientHash,
+    getServerHash,
+  );
 
   const {
     sidebarCollapsed,
     mobileSidebarOpen,
     closeMobileSidebar,
-    selectedRole,
-    setSelectedRole,
   } = useAssessorStore();
 
-  const { logout } = useAuthStore();
+  const { logout: logoutLegacy } = useLegacyAuthStore();
+  const user = useAuthStore((state) => state.user);
+  const logout = useAuthStore((state) => state.logout);
+  const assignedServices = useCaseExecutorStore((state) => state.assignedServices);
+  const riskServiceCount = assignedServices.filter((service) => {
+    const risk = Object.entries(service).find(([key]) =>
+      ["risklevel", "riskchannel"].includes(key.toLowerCase()),
+    )?.[1];
+    const flagged = (value: unknown) => value === true || value === 1 || value === "true";
+    const blocked = Object.entries(service).some(([key, value]) =>
+      key.toLowerCase() === "isblocked" && flagged(value),
+    );
+    const needsAction = Object.entries(service).some(([key, value]) =>
+      ["requirescustomeraction", "hasneedsreview"].includes(key.toLowerCase()) && flagged(value),
+    );
+    const elevatedRisk =
+      risk === 3 || risk === 4 || risk === "3" || risk === "4" ||
+      (typeof risk === "string" && /yellow|red/i.test(risk));
+    return blocked || needsAction || elevatedRisk;
+  }).length;
+  const unreadMessages = useMessagingStore((state) => state.unreadCount);
+  const unreadNotifications = useNotificationStore((state) => state.unreadCount);
   const activeRole = pathname.includes("/admin/case-Executer")
     ? "case_executor"
-    : selectedRole;
+    : "assessor";
   const dashboardHref = activeRole === "case_executor"
     ? "/admin/case-Executer"
     : "/admin/dashboard";
+  const userName =
+    (authReady && [user?.firstName, user?.lastName].filter(Boolean).join(" ")) ||
+    (authReady && user?.username) ||
+    (authReady && user?.email) ||
+    "Signed in";
+  const assignedRoleName = authReady ? user?.roles?.reduce<string>(
+    (name, role) =>
+      name || (typeof role === "string" ? "" : role.roleName || ""),
+    "",
+  ) : "";
+  const userRole =
+    activeRole === "case_executor"
+      ? "Case Executor"
+      : (authReady && user?.roleName) || assignedRoleName || "Assessor";
+  const executorGroups = [
+    { label: "Today", key: "today" },
+    { label: "Work", key: "work" },
+    { label: "Communication", key: "communication" },
+    { label: "Account", key: "account" },
+  ];
 
-  const [roleOpen, setRoleOpen] = useState(false);
+  useEffect(() => {
+    if (activeRole === "case_executor") {
+      const timeoutId = window.setTimeout(() => {
+        void useMessagingStore.getState().fetchUnreadCount();
+        void useNotificationStore.getState().fetchUnreadCount();
+      }, 0);
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [activeRole]);
 
   const isActive = (href: string) => {
     const fullHref = `/${lang}${href}`;
-    if (href === "/admin/dashboard") {
-      return pathname === fullHref;
+    const hashIndex = fullHref.indexOf("#");
+    if (hashIndex >= 0) {
+      const routeHref = fullHref.slice(0, hashIndex);
+      const targetHash = fullHref.slice(hashIndex);
+      return pathname === routeHref && currentHash === targetHash;
     }
-    return pathname.startsWith(fullHref);
+    if (href === "/admin/dashboard" || href === dashboardHref) {
+      return pathname === fullHref && !currentHash;
+    }
+    return pathname === fullHref || pathname.startsWith(`${fullHref}/`);
   };
 
   const handleLogout = async () => {
-    await AuthService.logout();
-    logout();
+    await logout();
+    logoutLegacy();
     router.push(`/${lang}/auth/login`);
   };
 
@@ -162,6 +242,7 @@ export default function AssessorSidebar() {
     label: string;
     href: string;
     icon: React.ElementType;
+    badge?: number;
   }) => {
     const Icon = item.icon;
     const active = isActive(item.href);
@@ -173,6 +254,7 @@ export default function AssessorSidebar() {
         href={fullHref}
         onClick={closeMobileSidebar}
         title={sidebarCollapsed ? item.label : undefined}
+        aria-current={active ? "page" : undefined}
         className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
           active
             ? "bg-blue-600 text-white shadow-sm"
@@ -189,7 +271,16 @@ export default function AssessorSidebar() {
         />
 
         {!sidebarCollapsed && (
-          <span className="truncate">{item.label}</span>
+          <>
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            {item.badge !== undefined && item.badge > 0 && (
+              <span className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-semibold ${
+                active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+              }`}>
+                {item.badge > 99 ? "99+" : item.badge}
+              </span>
+            )}
+          </>
         )}
       </Link>
     );
@@ -225,7 +316,7 @@ export default function AssessorSidebar() {
               </p>
 
               <p className="text-xs text-slate-500">
-                {activeRole === "case_executor" ? "Case Operations" : "Assessment Portal"}
+                {activeRole === "case_executor" ? "Case Operations" : "Ministry of Transport"}
               </p>
             </div>
           )}
@@ -233,43 +324,76 @@ export default function AssessorSidebar() {
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto px-3 py-5">
-        {/* Overview */}
-        <div className="mb-6">
-          {!sidebarCollapsed && (
-            <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Overview
-            </p>
-          )}
-
-          {renderNavItem({
-            label: "Dashboard",
-            href: dashboardHref,
-            icon: LayoutDashboard,
-          })}
-        </div>
-
+      <nav
+        aria-label={activeRole === "case_executor" ? "Case Executor navigation" : "Assessor navigation"}
+        className="flex-1 overflow-y-auto px-3 py-5"
+      >
         {activeRole === "case_executor" ? (
-          <div className="mb-6">
-            {!sidebarCollapsed && (
-              <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Case Execution
-              </p>
-            )}
-            <div className="space-y-1">
-              {caseExecutorItems.map(renderNavItem)}
-            </div>
-          </div>
+          <>
+            {executorGroups.map((group) => {
+              const items = caseExecutorItems
+                .filter((item) => item.group === group.key)
+                .map((item) => ({
+                  ...item,
+                  badge: item.label === "Assigned Services"
+                    ? assignedServices.length
+                    : item.label === "Risk & Compliance"
+                      ? riskServiceCount
+                      : item.label === "Messages"
+                        ? unreadMessages
+                        : item.label === "Notifications"
+                          ? unreadNotifications
+                          : undefined,
+                }));
+              if (group.key === "today") {
+                items.unshift({
+                  label: "Dashboard",
+                  href: dashboardHref,
+                  icon: LayoutDashboard,
+                  group: "today",
+                  badge: undefined,
+                });
+              }
+              return (
+                <div key={group.key} className="mb-6">
+                  {!sidebarCollapsed && (
+                    <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                      {group.label}
+                    </p>
+                  )}
+                  <div className="space-y-1">
+                    {items.map(renderNavItem)}
+                  </div>
+                </div>
+              );
+            })}
+          </>
         ) : (
           <>
             <div className="mb-6">
               {!sidebarCollapsed && (
                 <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Assessment
+                  Review queue
+                </p>
+              )}
+              {renderNavItem({
+                label: "Dashboard",
+                href: dashboardHref,
+                icon: LayoutDashboard,
+              })}
+              <div className="space-y-1">
+                {reviewQueueItems.map(renderNavItem)}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              {!sidebarCollapsed && (
+                <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Records
                 </p>
               )}
               <div className="space-y-1">
-                {assessmentItems.map(renderNavItem)}
+                {recordsItems.map(renderNavItem)}
               </div>
             </div>
 
@@ -299,92 +423,33 @@ export default function AssessorSidebar() {
             </div>
           </div>
         )}
-      </div>
+      </nav>
 
-      {/* Role Selector and Sign out */}
-      <div className="border-t border-slate-200 p-3 space-y-2">
-        <div className="relative">
-          {/* Main Trigger Button */}
-          <button
-            type="button"
-            onClick={() => setRoleOpen((open) => !open)}
-            title={sidebarCollapsed ? "Prototype role" : undefined}
-            className={`flex w-full items-center rounded-xl border border-slate-200 bg-slate-50 p-2.5 transition hover:bg-slate-100 ${
-                  sidebarCollapsed ? "justify-center" : "justify-between"
-            }`}
-          >
-            <div className="flex min-w-0 items-center gap-2.5">
-              {!sidebarCollapsed && (
-                <div className="min-w-0 text-left">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                    Prototype Role
-                  </p>
-                  <p className="truncate text-sm font-bold text-slate-900">
-                    {roles.find((role) => role.value === activeRole)?.label || "Assessor"}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {!sidebarCollapsed && (
-              <ChevronDown
-                className={`h-4 w-4 text-slate-400 transition-transform ${
-                  roleOpen ? "rotate-180" : ""
-                }`}
-              />
-            )}
-          </button>
-
-          {/* Dropdown Menu */}
-          {roleOpen && !sidebarCollapsed && (
-            <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
-              <div className="px-3 py-2 border-b border-slate-100">
-                <p className="text-xs font-bold text-slate-800">Switch demonstration role</p>
-              </div>
-
-              <div className="py-1 space-y-0.5">
-                {roles.map((role) => {
-                  const selected = activeRole === role.value;
-
-                  return (
-                    <button
-                      key={role.value}
-                      type="button"
-                      onClick={() => {
-                        setSelectedRole(role.value);
-                        setRoleOpen(false);
-                        if (role.value === "case_executor") {
-                          router.push(`/${lang}/admin/case-Executer`);
-                        }
-                      }}
-                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
-                        selected
-                          ? "bg-blue-50 text-blue-700 font-medium"
-                          : "text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      <span>{role.label}</span>
-                      {selected && (
-                        <span className="text-xs text-slate-400 font-normal">current</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Sign out option inside dropdown */}
-              <div className="border-t border-slate-100 pt-1 mt-1">
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Sign out</span>
-                </button>
-              </div>
+      {/* Signed-in account and sign out */}
+      <div className="border-t border-slate-200 p-3">
+        <div
+          className={`flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-2.5 ${
+            sidebarCollapsed ? "justify-center" : ""
+          }`}
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
+            {(userName[0] || userRole[0] || "U").toUpperCase()}
+          </div>
+          {!sidebarCollapsed && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-900">{userName}</p>
+              <p className="truncate text-xs text-slate-500">{userRole}</p>
             </div>
           )}
+          <button
+            type="button"
+            onClick={handleLogout}
+            aria-label="Sign out"
+            title={sidebarCollapsed ? "Sign out" : undefined}
+            className="rounded-lg p-2 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
       </aside>

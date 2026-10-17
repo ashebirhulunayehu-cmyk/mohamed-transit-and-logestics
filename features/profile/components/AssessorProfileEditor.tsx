@@ -38,6 +38,7 @@ export default function AssessorProfileEditor() {
         lastName,
         email,
         username: user.username || email,
+        phone: user.phone ?? user.phoneNumber ?? "",
       });
       setSuccess("Profile updated successfully.");
       setEditing(false);
