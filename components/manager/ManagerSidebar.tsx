@@ -34,7 +34,6 @@ const operationsItems = [
   { label: "Customers", href: "/admin/manager/customers", icon: Users, badge: null },
   { label: "Staff Management", href: "/admin/manager/team", icon: Users, badge: null },
   { label: "Documents", href: "/admin/manager/documents", icon: FileText, badge: null },
-  { label: "Shipments", href: "/admin/manager/shipments", icon: Truck, badge: null },
   { label: "Stage Transport", href: "/admin/manager/cases", icon: Truck, badge: null },
 ];
 

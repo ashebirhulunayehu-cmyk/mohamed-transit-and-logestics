@@ -170,7 +170,7 @@ const normalizeMode = (value: unknown): ServiceRecord["mode"] => {
     return "Unknown";
   }
   if (typeof value === "string") {
-    const normalized = value.toLowerCase();
+    const normalized = value.trim().toLowerCase();
     if (normalized.includes("multi")) return "Multimodal";
     if (normalized.includes("uni")) return "Unimodal";
   }
@@ -283,8 +283,26 @@ const toTimestamp = (value: unknown): number | null => {
   return Number.isNaN(timestamp) ? null : timestamp;
 };
 
+const readDatabaseId = (record: ApiRecord): string => {
+  for (const key of [
+    "id",
+    "shipmentId",
+    "serviceId",
+    "databaseId",
+    "shipmentDatabaseId",
+    "serviceDatabaseId",
+    "recordId",
+  ]) {
+    const value = readValue(record, key);
+    const text = readText(value);
+    const numeric = Number(text);
+    if (text && /^\d+$/.test(text) && Number.isSafeInteger(numeric) && numeric > 0) return text;
+  }
+  return "";
+};
+
 const mapService = (item: ApiRecord): ServiceRecord | null => {
-  const databaseId = readText(readValue(item, "id", "shipmentId", "serviceId"));
+  const databaseId = readDatabaseId(item);
   const trackingNumber = readText(readValue(item, "trackingNumber", "serviceNumber"));
   const id = trackingNumber || databaseId;
   if (!id) return null;
@@ -320,7 +338,7 @@ const mapService = (item: ApiRecord): ServiceRecord | null => {
 
   return {
     id,
-    shipmentId: databaseId || id,
+    ...(databaseId ? { shipmentId: databaseId } : {}),
     ...(referenceNumber ? { referenceNumber } : {}),
     title: readText(readValue(item, "description", "title")) || "—",
     importerName,
@@ -343,16 +361,18 @@ const mapService = (item: ApiRecord): ServiceRecord | null => {
   };
 };
 
-const mapManagerService = (item: ManagerExecutorAssignment): ServiceRecord | null =>
-  mapService({
+const mapManagerService = (item: ManagerExecutorAssignment): ServiceRecord | null => {
+  const mode = normalizeMode(item.mode);
+  const serviceType = normalizeMode(item.serviceType);
+
+  return mapService({
     id: item.id,
     trackingNumber: item.trackingNumber,
     description: item.description,
     importer: item.importer,
     importerName: item.importerName,
     importerId: item.importerId,
-    mode: item.mode ?? item.serviceType,
-    serviceType: item.serviceType,
+    mode: mode !== "Unknown" ? mode : serviceType,
     status: item.status,
     riskLevel: item.riskLevel,
     assignedCaseExecutor: item.assignedCaseExecutor,
@@ -360,6 +380,7 @@ const mapManagerService = (item: ManagerExecutorAssignment): ServiceRecord | nul
     updatedAt: item.updatedAt,
     dueAt: item.dueAt,
   });
+};
 
 const unwrapApiData = (value: unknown): unknown => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;

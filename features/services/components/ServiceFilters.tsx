@@ -32,7 +32,23 @@ const exportColumns: Array<{ label: string; value: (service: ServiceRecord) => s
   { label: "Updated", value: (service) => service.updated },
 ];
 
-const escapeCsv = (value: string): string => `"${value.replaceAll('"', '""')}"`;
+const columnWidths = [24, 20, 36, 28, 18, 16, 20, 20, 24, 16, 18, 24];
+
+const cellColors: Record<string, { fill: string; text: string }> = {
+  "In progress": { fill: "FFE0F2FE", text: "FF075985" },
+  "Needs review": { fill: "FFFEF3C7", text: "FF92400E" },
+  "Requires customer action": { fill: "FFFCE7F3", text: "FF9D174D" },
+  Pending: { fill: "FFF1F5F9", text: "FF334155" },
+  Blocked: { fill: "FFFEE2E2", text: "FF991B1B" },
+  Completed: { fill: "FFDCFCE7", text: "FF166534" },
+  Delivered: { fill: "FFDCFCE7", text: "FF166534" },
+  Unimodal: { fill: "FFE0F2FE", text: "FF075985" },
+  Multimodal: { fill: "FFE0E7FF", text: "FF3730A3" },
+  "Green channel": { fill: "FFDCFCE7", text: "FF166534" },
+  "Yellow channel": { fill: "FFFEF3C7", text: "FF92400E" },
+  "Red channel": { fill: "FFFEE2E2", text: "FF991B1B" },
+  "Blue channel": { fill: "FFDBEAFE", text: "FF1E40AF" },
+};
 
 export function ServiceFilters({ managerView = false }: { managerView?: boolean }) {
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -50,18 +66,79 @@ export function ServiceFilters({ managerView = false }: { managerView?: boolean 
     getFilteredServices,
   } = useServiceStore();
 
-  const exportServices = () => {
+  const exportServices = async () => {
     const rows = getFilteredServices();
-    const csv = [
-      exportColumns.map(({ label }) => escapeCsv(label)).join(","),
-      ...rows.map((service) =>
-        exportColumns.map(({ value }) => escapeCsv(value(service))).join(","),
-      ),
-    ].join("\r\n");
-    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
+    const { default: ExcelJS } = await import("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Services", {
+      properties: { tabColor: { argb: "FF2563EB" }, defaultRowHeight: 24 },
+      pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1 },
+      views: [{ state: "frozen", ySplit: 4 }],
+    });
+    const columnCount = exportColumns.length;
+
+    worksheet.columns = exportColumns.map((column, index) => ({
+      key: `column${index}`,
+      width: columnWidths[index] ?? 18,
+    }));
+    worksheet.mergeCells(1, 1, 1, columnCount);
+    worksheet.getCell("A1").value = managerView ? "MANAGER SERVICE REGISTER" : "SERVICE REGISTER";
+    worksheet.getCell("A1").font = { name: "Aptos Display", size: 18, bold: true, color: { argb: "FFFFFFFF" } };
+    worksheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF17324D" } };
+    worksheet.getCell("A1").alignment = { vertical: "middle" };
+    worksheet.getRow(1).height = 38;
+
+    worksheet.mergeCells(2, 1, 2, columnCount);
+    worksheet.getCell("A2").value = `Exported ${new Date().toLocaleString()}  |  ${rows.length} services`;
+    worksheet.getCell("A2").font = { name: "Aptos", size: 10, color: { argb: "FF475569" } };
+    worksheet.getCell("A2").alignment = { vertical: "middle" };
+    worksheet.getRow(2).height = 24;
+    worksheet.addRow([]);
+
+    const headerRow = worksheet.addRow(exportColumns.map(({ label }) => label));
+    headerRow.height = 28;
+    headerRow.eachCell((cell) => {
+      cell.font = { name: "Aptos", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } };
+      cell.alignment = { vertical: "middle", wrapText: true };
+      cell.border = { bottom: { style: "medium", color: { argb: "FF1D4ED8" } } };
+    });
+
+    worksheet.addRows(rows.map((service) => exportColumns.map(({ value }) => value(service))));
+    worksheet.autoFilter = {
+      from: { row: 4, column: 1 },
+      to: { row: 4, column: columnCount },
+    };
+
+    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber < 5) return;
+      row.eachCell((cell, columnNumber) => {
+        cell.font = { name: "Aptos", size: 10, color: { argb: "FF1E293B" } };
+        cell.alignment = { vertical: "middle", wrapText: columnNumber === 3 || columnNumber === 4 || columnNumber === 9 };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: rowNumber % 2 === 0 ? "FFF1F5F9" : "FFFFFFFF" },
+        };
+        cell.border = { bottom: { style: "hair", color: { argb: "FFE2E8F0" } } };
+
+        const value = String(cell.value ?? "");
+        const color = cellColors[value];
+        if (color && [6, 7, 8].includes(columnNumber)) {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: color.fill } };
+          cell.font = { name: "Aptos", size: 10, bold: true, color: { argb: color.text } };
+        }
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer as BlobPart], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = managerView ? "manager-services.csv" : "services.csv";
+    link.download = managerView ? "manager-services.xlsx" : "services.xlsx";
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -69,10 +146,10 @@ export function ServiceFilters({ managerView = false }: { managerView?: boolean 
   };
 
   return (
-    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-center justify-between gap-3">
+    <div className={`flex flex-col items-center justify-between gap-3 border border-slate-200 bg-white p-4 shadow-sm lg:flex-row ${managerView ? "rounded-lg" : "rounded-xl"}`}>
       {/* Search Input & Select Dropdowns */}
-      <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto flex-1">
-        <div className="relative min-w-[260px] flex-1 lg:flex-initial">
+      <div className={`grid w-full flex-1 items-center gap-2 lg:w-auto ${managerView ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(200px,1.35fr)_repeat(3,minmax(125px,1fr))]" : "flex flex-wrap"}`}>
+        <div className={`relative flex-1 ${managerView ? "min-w-0" : "min-w-65 lg:flex-initial"}`}>
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
           <input
             type="text"
@@ -80,7 +157,7 @@ export function ServiceFilters({ managerView = false }: { managerView?: boolean 
             placeholder="Search by service ID, reference..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent text-slate-800 placeholder:text-slate-400"
+            className={`w-full border border-slate-200 py-2 pl-9 pr-3 text-slate-800 placeholder:text-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-sky-500 ${managerView ? "min-h-10 rounded-md text-sm" : "rounded-lg text-xs"}`}
           />
         </div>
 
@@ -90,7 +167,7 @@ export function ServiceFilters({ managerView = false }: { managerView?: boolean 
             aria-label="Filter services by status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="pl-8 pr-8 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer appearance-none"
+            className={`appearance-none border border-slate-200 bg-white py-2 pl-8 pr-8 font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 ${managerView ? "min-h-10 w-full rounded-md text-sm" : "cursor-pointer rounded-lg text-xs"}`}
           >
             <option value="ALL">All statuses</option>
             <option value="Draft">Draft</option>
@@ -115,7 +192,7 @@ export function ServiceFilters({ managerView = false }: { managerView?: boolean 
           aria-label="Filter services by transport mode"
           value={modeFilter}
           onChange={(e) => setModeFilter(e.target.value)}
-          className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
+          className={`border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 ${managerView ? "min-h-10 w-full rounded-md text-sm" : "cursor-pointer rounded-lg text-xs"}`}
         >
           <option value="ALL">All modes</option>
           <option value="Unimodal">Unimodal</option>
@@ -127,7 +204,7 @@ export function ServiceFilters({ managerView = false }: { managerView?: boolean 
           aria-label="Filter services by risk channel"
           value={channelFilter}
           onChange={(e) => setChannelFilter(e.target.value)}
-          className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
+          className={`border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 ${managerView ? "min-h-10 w-full rounded-md text-sm" : "cursor-pointer rounded-lg text-xs"}`}
         >
           <option value="ALL">All channels</option>
           <option value="Green channel">Green channel</option>
@@ -137,7 +214,7 @@ export function ServiceFilters({ managerView = false }: { managerView?: boolean 
         </select>
       </div>
 
-      <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
+      <div className={`flex w-full items-center justify-end gap-2 lg:w-auto ${managerView ? "shrink-0" : ""}`}>
         <div className="relative">
           <button
             type="button"
@@ -145,7 +222,7 @@ export function ServiceFilters({ managerView = false }: { managerView?: boolean 
             aria-label="Choose visible service columns"
             aria-expanded={columnsOpen}
             onClick={() => setColumnsOpen((open) => !open)}
-            className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            className={`flex min-h-10 items-center gap-1.5 border border-slate-200 px-3 py-2 font-semibold text-slate-700 transition-colors hover:bg-slate-50 ${managerView ? "rounded-md text-sm" : "rounded-lg text-xs"}`}
           >
             <Columns className="w-3.5 h-3.5 text-slate-500" />
             Columns
@@ -168,9 +245,9 @@ export function ServiceFilters({ managerView = false }: { managerView?: boolean 
         </div>
         <button
           type="button"
-          aria-label="Export filtered services as CSV"
+          aria-label="Export filtered services as a formatted Excel workbook"
           onClick={exportServices}
-          className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+          className={`flex min-h-10 items-center gap-1.5 border border-slate-200 px-3 py-2 font-semibold text-slate-700 transition-colors hover:bg-slate-50 ${managerView ? "rounded-md text-sm" : "rounded-lg text-xs"}`}
         >
           <Download className="w-3.5 h-3.5 text-slate-500" />
           Export

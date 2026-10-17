@@ -52,24 +52,49 @@ interface ManagerState {
   fetchCustomers: (params?: ManagerCustomerQuery) => Promise<ManagerCustomer[]>;
   fetchServiceById: (id: string | number) => Promise<ManagerServiceDetail | null>;
   updateServiceStage: (payload: ShipmentServiceStageUpdatePayload) => Promise<boolean>;
+  uploadServiceDocument: (payload: FormData) => Promise<void>;
   assignExecutor: (payload: ManagerExecutorAssignmentRequest) => Promise<ManagerExecutorAssignment | null>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+const readField = (record: Record<string, unknown>, ...names: string[]): unknown => {
+  const key = Object.keys(record).find((candidate) =>
+    names.some((name) => candidate.toLowerCase() === name.toLowerCase()),
+  );
+  return key ? record[key] : undefined;
+};
+
+const readNumericId = (record: Record<string, unknown>, ...keys: string[]): number | string | undefined => {
+  for (const key of keys) {
+    const value = readField(record, key);
+    if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return value;
+    if (typeof value === "string" && /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0) {
+      return value;
+    }
+  }
+  return undefined;
+};
+
 const normalizeAssignedUser = (value: unknown): ManagerAssignedUserSummary | null => {
   if (!isRecord(value)) return null;
 
+  const id = readField(value, "id", "userId", "staffId");
+  const readText = (...keys: string[]) => {
+    const field = readField(value, ...keys);
+    return typeof field === "string" ? field : null;
+  };
+
   return {
-    id: typeof value.id === "number" || typeof value.id === "string" ? value.id : undefined,
-    username: typeof value.username === "string" ? value.username : null,
-    email: typeof value.email === "string" ? value.email : null,
-    firstName: typeof value.firstName === "string" ? value.firstName : null,
-    lastName: typeof value.lastName === "string" ? value.lastName : null,
-    businessName: typeof value.businessName === "string" ? value.businessName : null,
-    profilePhoto: typeof value.profilePhoto === "string" ? value.profilePhoto : null,
-    phone: typeof value.phone === "string" ? value.phone : null,
+    id: typeof id === "number" || typeof id === "string" ? id : undefined,
+    username: readText("username", "userName"),
+    email: readText("email"),
+    firstName: readText("firstName", "givenName"),
+    lastName: readText("lastName", "surname"),
+    businessName: readText("businessName", "companyName"),
+    profilePhoto: readText("profilePhoto", "profileImage"),
+    phone: readText("phone", "phoneNumber"),
   };
 };
 
@@ -202,14 +227,32 @@ const normalizeManagerNotification = (value: unknown, index: number): Notificati
 const normalizeAssignment = (value: unknown): ManagerExecutorAssignment | null => {
   if (!isRecord(value)) return null;
 
-  const trackingNumber =
-    typeof value.trackingNumber === "string"
-      ? value.trackingNumber
-      : typeof value.serviceNumber === "string"
-        ? value.serviceNumber
-        : "";
-  const id = typeof value.id === "number" || typeof value.id === "string" ? value.id : undefined;
-  const importerId = typeof value.importerId === "number" || typeof value.importerId === "string" ? value.importerId : undefined;
+  const trackingNumberValue = readField(value, "trackingNumber", "serviceNumber", "serviceReference");
+  const id = readNumericId(
+    value,
+    "id",
+    "shipmentId",
+    "serviceId",
+    "databaseId",
+    "shipmentDatabaseId",
+    "serviceDatabaseId",
+    "recordId",
+  );
+  const importerIdValue = readField(value, "importerId", "customerId");
+  const trackingNumber = typeof trackingNumberValue === "string" ? trackingNumberValue : "";
+  const importerId = typeof importerIdValue === "number" || typeof importerIdValue === "string" ? importerIdValue : undefined;
+  const readText = (...keys: string[]) => {
+    const field = readField(value, ...keys);
+    return typeof field === "string" ? field : "";
+  };
+  const readId = (...keys: string[]) => {
+    const field = readField(value, ...keys);
+    return typeof field === "number" || typeof field === "string" ? field : null;
+  };
+  const readScalar = (...keys: string[]) => {
+    const field = readField(value, ...keys);
+    return typeof field === "number" || typeof field === "string" ? field : null;
+  };
 
   if (!trackingNumber || id === undefined) return null;
 
@@ -217,37 +260,31 @@ const normalizeAssignment = (value: unknown): ManagerExecutorAssignment | null =
     id,
     trackingNumber,
     importerId,
-    importer: normalizeAssignedUser(value.importer),
-    description: typeof value.description === "string"
-      ? value.description
-      : typeof value.itemDescription === "string"
-        ? value.itemDescription
-        : "",
-    importerName: typeof value.importerName === "string" ? value.importerName : null,
-    mode: typeof value.mode === "number" || typeof value.mode === "string" ? value.mode : null,
-    status: typeof value.status === "number" || typeof value.status === "string" ? value.status : "",
-    assignedHub: typeof value.assignedHub === "number" || typeof value.assignedHub === "string" ? value.assignedHub : null,
-    assignedCaseExecutorId: typeof value.assignedCaseExecutorId === "number" || typeof value.assignedCaseExecutorId === "string" ? value.assignedCaseExecutorId : null,
-    assignedCaseExecutor: normalizeAssignedUser(value.assignedCaseExecutor),
-    assignedAssessorId: typeof value.assignedAssessorId === "number" || typeof value.assignedAssessorId === "string" ? value.assignedAssessorId : null,
-    assignedAssessor: normalizeAssignedUser(value.assignedAssessor),
-    createdByUser: normalizeAssignedUser(value.createdByUser),
-    customerId: typeof value.customerId === "number" || typeof value.customerId === "string"
-      ? value.customerId
-      : null,
-    assignmentNotes: typeof value.assignmentNotes === "string" ? value.assignmentNotes : null,
-    origin: typeof value.origin === "string" ? value.origin : "",
-    destination: typeof value.destination === "string" ? value.destination : "",
-    routeCategory: typeof value.routeCategory === "string" ? value.routeCategory : null,
-    eta: typeof value.eta === "string" ? value.eta : null,
-    declaredValue: typeof value.declaredValue === "number" || typeof value.declaredValue === "string" ? value.declaredValue : null,
-    taxCategory: typeof value.taxCategory === "string" ? value.taxCategory : null,
-    countryOfOrigin: typeof value.countryOfOrigin === "string" ? value.countryOfOrigin : null,
-    serviceType: typeof value.serviceType === "number" || typeof value.serviceType === "string" ? value.serviceType : null,
-    riskLevel: typeof value.riskLevel === "number" || typeof value.riskLevel === "string" ? value.riskLevel : null,
-    createAt: typeof value.createAt === "string" ? value.createAt : "",
-    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : null,
-    recordStatus: typeof value.recordStatus === "number" ? value.recordStatus : 0,
+    importer: normalizeAssignedUser(readField(value, "importer", "customer", "importerProfile")),
+    description: readText("description", "itemDescription", "title"),
+    importerName: readText("importerName", "businessName") || null,
+    mode: readScalar("mode", "transportMode"),
+    status: readScalar("status", "serviceStatus") ?? "",
+    assignedHub: readId("assignedHub", "assignedHubId"),
+    assignedCaseExecutorId: readId("assignedCaseExecutorId", "caseExecutorId"),
+    assignedCaseExecutor: normalizeAssignedUser(readField(value, "assignedCaseExecutor", "caseExecutor", "executor")),
+    assignedAssessorId: readId("assignedAssessorId", "assessorId"),
+    assignedAssessor: normalizeAssignedUser(readField(value, "assignedAssessor", "assessor")),
+    createdByUser: normalizeAssignedUser(readField(value, "createdByUser", "createdBy")),
+    customerId: readId("customerId", "importerId"),
+    assignmentNotes: readText("assignmentNotes", "notes") || null,
+    origin: readText("origin", "countryOfOrigin"),
+    destination: readText("destination"),
+    routeCategory: readText("routeCategory", "destination") || null,
+    eta: readText("eta", "estimatedArrival") || null,
+    declaredValue: readScalar("declaredValue"),
+    taxCategory: readText("taxCategory") || null,
+    countryOfOrigin: readText("countryOfOrigin") || null,
+    serviceType: readScalar("serviceType", "serviceMode"),
+    riskLevel: readScalar("riskLevel", "riskChannel"),
+    createAt: readText("createAt", "createdAt", "registeredDate"),
+    updatedAt: readText("updatedAt", "lastUpdateDate") || null,
+    recordStatus: Number(readField(value, "recordStatus")) || 0,
   };
 };
 
@@ -282,59 +319,107 @@ const normalizeServiceMessage = (value: unknown): ManagerServiceMessage | null =
   };
 };
 
+const normalizeServiceCollection = (value: unknown, collectionNames: string[]): unknown[] => {
+  let current = value;
+  const collectionKeys = collectionNames.map((name) => name.toLowerCase());
+  const wrapperKeys = ["data", "payload", "response", "result", "resultdata", "items", "records", "rows"];
+
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (Array.isArray(current)) return current;
+    if (!isRecord(current)) return [];
+
+    const collection = Object.entries(current).find(
+      ([key, entry]) => collectionKeys.includes(key.toLowerCase()) && (Array.isArray(entry) || isRecord(entry)),
+    );
+    if (collection) {
+      current = collection[1];
+      continue;
+    }
+
+    const wrapper = Object.entries(current).find(
+      ([key, entry]) => wrapperKeys.includes(key.toLowerCase()) && (Array.isArray(entry) || isRecord(entry)),
+    );
+    if (wrapper) {
+      current = wrapper[1];
+      continue;
+    }
+
+    return [];
+  }
+
+  return [];
+};
+
 const normalizeServiceStage = (value: unknown): ManagerServiceStage | null => {
   if (!isRecord(value)) return null;
 
-  const nullableText = (key: string): string | null =>
-    typeof value[key] === "string" ? value[key] : null;
-  const nullableId = (key: string): number | string | undefined =>
-    typeof value[key] === "number" || typeof value[key] === "string" ? value[key] : undefined;
+  const nullableText = (...keys: string[]): string | null => {
+    const field = readField(value, ...keys);
+    return typeof field === "string" || typeof field === "number" ? String(field) : null;
+  };
+  const nullableId = (...keys: string[]): number | string | undefined => {
+    const field = readField(value, ...keys);
+    return typeof field === "number" || typeof field === "string" ? field : undefined;
+  };
+  const nullableStatus = (...keys: string[]): number | string | null => {
+    const field = readField(value, ...keys);
+    return typeof field === "number" || typeof field === "string" ? field : null;
+  };
 
   return {
-    id: nullableId("id"),
-    stageName: nullableText("stageName"),
-    name: nullableText("name"),
-    status: typeof value.status === "number" || typeof value.status === "string" ? value.status : null,
-    stageStatus: typeof value.stageStatus === "number" || typeof value.stageStatus === "string" ? value.stageStatus : null,
-    currentStatus: typeof value.currentStatus === "number" || typeof value.currentStatus === "string" ? value.currentStatus : null,
-    createdAt: nullableText("createdAt"),
-    updatedAt: nullableText("updatedAt"),
-    completedAt: nullableText("completedAt"),
-    notes: nullableText("notes"),
-    comments: nullableText("comments"),
+    ...value,
+    id: nullableId("serviceStageExecutionId", "stageExecutionId", "executionId", "id", "shipmentStageId", "serviceStageId", "stageId"),
+    stageExecutionId: nullableId("stageExecutionId", "serviceStageExecutionId", "executionId"),
+    serviceStageExecutionId: nullableId("serviceStageExecutionId", "stageExecutionId", "executionId"),
+    executionId: nullableId("executionId", "stageExecutionId", "serviceStageExecutionId"),
+    stageName: nullableText("stageName", "name", "title", "stage"),
+    name: nullableText("name", "stageName", "title", "stage"),
+    status: nullableStatus("status"),
+    stageStatus: nullableStatus("stageStatus"),
+    currentStatus: nullableStatus("currentStatus"),
+    createdAt: nullableText("createdAt", "createAt"),
+    updatedAt: nullableText("updatedAt", "lastUpdatedAt"),
+    completedAt: nullableText("completedAt", "finishedAt"),
+    notes: nullableText("notes", "stageNotes", "summary"),
+    comments: nullableText("comments", "comment"),
   };
 };
 
 const normalizeServiceDocument = (value: unknown): ManagerServiceDocument | null => {
   if (!isRecord(value)) return null;
 
-  const nullableText = (key: string): string | null =>
-    typeof value[key] === "string" ? value[key] : null;
-  const nullableId = (key: string): number | string | undefined =>
-    typeof value[key] === "number" || typeof value[key] === "string" ? value[key] : undefined;
+  const nullableText = (...keys: string[]): string | null => {
+    const field = readField(value, ...keys);
+    return typeof field === "string" || typeof field === "number" ? String(field) : null;
+  };
+  const nullableId = (...keys: string[]): number | string | undefined => {
+    const field = readField(value, ...keys);
+    return typeof field === "number" || typeof field === "string" ? field : undefined;
+  };
+  const isTrue = (...keys: string[]): boolean => {
+    const field = readField(value, ...keys);
+    return field === true || field === 1 || field === "1" || field === "true";
+  };
+  const stageId = nullableId("stageId", "serviceStageId", "shipmentStageId");
 
   return {
-    id: nullableId("id"),
+    id: nullableId("id", "documentId"),
     fileName: nullableText("fileName"),
-    originalFileName: nullableText("originalFileName"),
+    originalFileName: nullableText("originalFileName", "originalName"),
     fileExtension: nullableText("fileExtension"),
-    mimeType: nullableText("mimeType"),
-    documentType: typeof value.documentType === "number" || typeof value.documentType === "string"
-      ? value.documentType
+    mimeType: nullableText("mimeType", "contentType"),
+    documentType: typeof readField(value, "documentType", "type") === "number" || typeof readField(value, "documentType", "type") === "string"
+      ? readField(value, "documentType", "type") as number | string
       : null,
     description: nullableText("description"),
-    isRequired: value.isRequired === true,
-    isVerified: value.isVerified === true,
+    isRequired: isTrue("isRequired", "required"),
+    isVerified: isTrue("isVerified", "verified"),
     verificationNotes: nullableText("verificationNotes"),
-    fileSizeBytes: typeof value.fileSizeBytes === "number" ? value.fileSizeBytes : null,
-    stageId: typeof value.stageId === "number" || typeof value.stageId === "string"
-      ? value.stageId
-      : typeof value.serviceStageId === "number" || typeof value.serviceStageId === "string"
-        ? value.serviceStageId
-        : typeof value.shipmentStageId === "number" || typeof value.shipmentStageId === "string"
-          ? value.shipmentStageId
-          : null,
-    createAt: nullableText("createAt"),
+    fileSizeBytes: typeof readField(value, "fileSizeBytes", "sizeBytes") === "number"
+      ? readField(value, "fileSizeBytes", "sizeBytes") as number
+      : null,
+    stageId: stageId ?? null,
+    createAt: nullableText("createAt", "createdAt", "uploadedAt"),
   };
 };
 
@@ -346,15 +431,15 @@ const normalizeServiceDetail = (value: unknown): ManagerServiceDetail | null => 
 
   return {
     ...service,
-    stages: Array.isArray(value.stages)
-      ? value.stages.map(normalizeServiceStage).filter((stage): stage is ManagerServiceStage => stage !== null)
-      : [],
-    documents: Array.isArray(value.documents)
-      ? value.documents.map(normalizeServiceDocument).filter((document): document is ManagerServiceDocument => document !== null)
-      : [],
-    messages: Array.isArray(value.messages)
-      ? value.messages.map(normalizeServiceMessage).filter((message): message is ManagerServiceMessage => message !== null)
-      : [],
+    stages: normalizeServiceCollection(value, ["stages", "serviceStages", "shipmentStages", "executions", "serviceStageExecutions"])
+      .map(normalizeServiceStage)
+      .filter((stage): stage is ManagerServiceStage => stage !== null),
+    documents: normalizeServiceCollection(value, ["documents", "serviceDocuments", "shipmentDocuments"])
+      .map(normalizeServiceDocument)
+      .filter((document): document is ManagerServiceDocument => document !== null),
+    messages: normalizeServiceCollection(value, ["messages", "serviceMessages", "stageDiscussions"])
+      .map(normalizeServiceMessage)
+      .filter((message): message is ManagerServiceMessage => message !== null),
   };
 };
 
@@ -767,11 +852,32 @@ export const useManagerStore = create<ManagerState>((set, get) => ({
 
     try {
       const response = await ManagerEndpoints.getServiceById(id);
-      const selectedService = normalizeServiceDetail(unwrapApiData(response));
+      const serviceDetails = normalizeServiceDetail(unwrapApiData(response));
 
-      if (!selectedService) {
+      if (!serviceDetails) {
         throw new Error("No service details returned from the API.");
       }
+
+      const serviceId = serviceDetails.id ?? id;
+      const [stagesResponse, documentsResponse] = await Promise.allSettled([
+        ManagerEndpoints.getServiceStages(serviceId),
+        ManagerEndpoints.getServiceDocuments(serviceId),
+      ]);
+      const apiStages = stagesResponse.status === "fulfilled"
+        ? normalizeServiceCollection(unwrapApiData(stagesResponse.value), ["stages", "serviceStages", "shipmentStages", "executions", "serviceStageExecutions"])
+            .map(normalizeServiceStage)
+            .filter((stage): stage is ManagerServiceStage => stage !== null)
+        : [];
+      const apiDocuments = documentsResponse.status === "fulfilled"
+        ? normalizeServiceCollection(unwrapApiData(documentsResponse.value), ["documents", "serviceDocuments", "shipmentDocuments"])
+            .map(normalizeServiceDocument)
+            .filter((document): document is ManagerServiceDocument => document !== null)
+        : [];
+      const selectedService = {
+        ...serviceDetails,
+        stages: apiStages.length ? apiStages : serviceDetails.stages,
+        documents: apiDocuments.length ? apiDocuments : serviceDetails.documents,
+      };
 
       set({ selectedService, serviceDetailLoading: false, serviceDetailError: null });
       return selectedService;
@@ -788,14 +894,14 @@ export const useManagerStore = create<ManagerState>((set, get) => ({
 
   updateServiceStage: async (payload) => {
     const shipmentId = payload.shipmentId;
-    const shipmentStageId = payload.shipmentStageId;
+    const stageExecutionId = payload.stageExecutionId ?? payload.shipmentStageId;
     if (
       shipmentId === null ||
       shipmentId === undefined ||
       !String(shipmentId).trim() ||
-      shipmentStageId === null ||
-      shipmentStageId === undefined ||
-      !String(shipmentStageId).trim()
+      stageExecutionId === null ||
+      stageExecutionId === undefined ||
+      !String(stageExecutionId).trim()
     ) {
       set({ serviceDetailError: "A service and stage ID are required to update a stage." });
       return false;
@@ -804,7 +910,12 @@ export const useManagerStore = create<ManagerState>((set, get) => ({
     set({ serviceDetailLoading: true, serviceDetailError: null });
 
     try {
-      await ManagerEndpoints.updateServiceStage(payload);
+      const userId = payload.userId ?? payload.UserId;
+      await ManagerEndpoints.updateServiceStage({
+        ...payload,
+        userId,
+        UserId: userId,
+      });
       const refreshedService = await get().fetchServiceById(shipmentId);
       return refreshedService !== null;
     } catch (error: unknown) {
@@ -816,6 +927,10 @@ export const useManagerStore = create<ManagerState>((set, get) => ({
       set({ serviceDetailLoading: false, serviceDetailError: message });
       return false;
     }
+  },
+
+  uploadServiceDocument: async (payload) => {
+    await ManagerEndpoints.uploadServiceDocument(payload);
   },
 
   assignExecutor: async (payload) => {

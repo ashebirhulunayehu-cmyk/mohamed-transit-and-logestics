@@ -28,6 +28,9 @@ export interface IUserRoleAssignment {
 
 export interface IUser {
   id?: string | number;
+  userId?: string | number;
+  UserId?: string | number;
+  sub?: string | number;
   username?: string;
   roleName?: string;
   email?: string;
