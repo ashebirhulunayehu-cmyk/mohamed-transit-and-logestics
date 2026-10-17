@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { RefreshCw } from "lucide-react";
 import { ServiceFilters } from "@/features/services/components/ServiceFilters";
 import { ServiceTable } from "@/features/services/components/ServiceTable";
 import { useServiceStore } from "@/features/services/service.store";
 
 export default function ServicesPage() {
 	const fetchServices = useServiceStore((state) => state.fetchServices);
-	const loading = useServiceStore((state) => state.loading);
 
 	useEffect(() => {
 		void fetchServices();
@@ -28,21 +26,11 @@ export default function ServicesPage() {
 						Cases visible to you for valuation and compliance assessment.
 					</p>
 				</div>
-				<button
-					type="button"
-					onClick={() => void fetchServices()}
-					disabled={loading}
-					aria-label="Refresh assessor services"
-					className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
-				>
-					<RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-					Refresh
-				</button>
 			</header>
 
-			<div className="space-y-3">
-				<ServiceFilters />
-				<ServiceTable />
+			<div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+				<ServiceFilters embedded />
+				<ServiceTable embedded />
 			</div>
 		</div>
 	);

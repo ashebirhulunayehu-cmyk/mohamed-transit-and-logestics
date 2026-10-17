@@ -110,6 +110,35 @@ const normalizeApplicant = (customer: AssessorItem): ApprovalApplicant => {
     customer.activeServices === null || customer.activeServices === undefined
       ? Number.NaN
       : Number(customer.activeServices);
+  const checklist = documents.map((entry, index) => {
+    const expiryDate = getText(entry.expiryDate) || null;
+    const isExpired =
+      getBoolean(entry.isExpired) === true ||
+      Boolean(expiryDate && new Date(expiryDate).getTime() < Date.now());
+    const documentStatus = normalizeApprovalStatus(entry);
+    const isVerified =
+      getBoolean(entry.isVerified) === true || documentStatus === "Verified";
+    const rawType = entry.documentType;
+    const typeCode = typeof rawType === "number" ? rawType : Number(rawType);
+    const documentType =
+      documentTypeNames[typeCode] ??
+      (typeof rawType === "string" ? rawType : "Document");
+    return {
+      id: String(entry.id ?? entry.documentId ?? `unavailable-${index}`),
+      name: getText(entry.originalFileName) || documentType,
+      documentType,
+      status: isExpired
+        ? "Expired"
+        : documentStatus,
+      isRequired: getBoolean(entry.isRequired) === true,
+      isVerified,
+      expiryDate,
+      isExpired,
+      verificationNotes: getText(entry.verificationNotes) || null,
+      submittedAt: getText(entry.createAt) || null,
+    } satisfies ApprovalApplicant["checklist"][number];
+  });
+  const applicantStatus = normalizeApprovalStatus(customer);
 
   return {
     id: String(customer.id ?? customer.customerId ?? ""),
@@ -119,7 +148,11 @@ const normalizeApplicant = (customer: AssessorItem): ApprovalApplicant => {
     importLicense: getText(customer.importLicense) || "-",
     importLicenseExpiry: getText(customer.importLicenseExpiry) || null,
     tin: getText(customer.tinNumber) || "-",
-    status: normalizeApprovalStatus(customer),
+    status:
+      applicantStatus === "Pending check" &&
+      checklist.some((item) => item.isExpired || item.status === "Flagged")
+        ? "Flagged"
+        : applicantStatus,
     verificationNotes: getText(customer.verificationNotes) || null,
     primaryContact: getText(customer.primaryContact, customer.contactPerson) || "-",
     email: getText(customer.contactEmail) || "-",
@@ -136,34 +169,7 @@ const normalizeApplicant = (customer: AssessorItem): ApprovalApplicant => {
       ? rawActiveServices
       : null,
     isReturnedForRevision,
-    checklist: documents.map((entry, index) => {
-      const expiryDate = getText(entry.expiryDate) || null;
-      const isExpired =
-        getBoolean(entry.isExpired) === true ||
-        Boolean(expiryDate && new Date(expiryDate).getTime() < Date.now());
-      const documentStatus = normalizeApprovalStatus(entry);
-      const isVerified =
-        getBoolean(entry.isVerified) === true || documentStatus === "Verified";
-      const rawType = entry.documentType;
-      const typeCode = typeof rawType === "number" ? rawType : Number(rawType);
-      const documentType =
-        documentTypeNames[typeCode] ??
-        (typeof rawType === "string" ? rawType : "Document");
-      return {
-        id: String(entry.id ?? index),
-        name: getText(entry.originalFileName) || documentType,
-        documentType,
-        status: isExpired
-          ? "Expired"
-          : documentStatus,
-        isRequired: getBoolean(entry.isRequired) === true,
-        isVerified,
-        expiryDate,
-        isExpired,
-        verificationNotes: getText(entry.verificationNotes) || null,
-        submittedAt: getText(entry.createAt) || null,
-      };
-    }),
+    checklist,
   };
 };
 
@@ -221,6 +227,8 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   const downloadCustomerDocument = useAssessorStore((state) => state.downloadCustomerDocument);
   const actionLoading = useAssessorStore((state) => state.loading);
   const dashboardData = useAssessorStore((state) => state.dashboardData);
+  const dashboardLoading = useAssessorStore((state) => state.dashboardLoading);
+  const dashboardError = useAssessorStore((state) => state.dashboardError);
   const fetchDashboard = useAssessorStore((state) => state.fetchDashboard);
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -248,17 +256,24 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
   }, [pendingCustomers]);
 
   const stats = useMemo(() => {
-    const awaitingDecision = applicants.filter(
-      (applicant) => applicant.status === "Pending check",
+    const awaitingDecision = applicants.filter((applicant) =>
+      ["Pending check", "Flagged"].includes(applicant.status),
     ).length;
     const returnedForRevision = applicants.filter(
       (applicant) => applicant.status === "Returned for revision",
     ).length;
-    const verifiedImporters = dashboardData?.verifiedCustomers ?? 0;
+    const verifiedImporters =
+      dashboardError
+        ? "Unavailable"
+        : dashboardData?.verifiedCustomers ?? (dashboardLoading ? "…" : "—");
     const medianDecisionTime =
-      dashboardData?.medianCustomerDecisionDays == null
-        ? "N/A"
-        : `${dashboardData.medianCustomerDecisionDays.toFixed(1)} d`;
+      dashboardError
+        ? "Unavailable"
+        : dashboardData?.medianCustomerDecisionDays != null
+          ? `${dashboardData.medianCustomerDecisionDays.toFixed(1)} d`
+          : dashboardLoading
+            ? "…"
+            : "N/A";
 
     return {
       awaitingDecision,
@@ -266,7 +281,7 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
       verifiedImporters,
       medianDecisionTime,
     };
-  }, [applicants, dashboardData]);
+  }, [applicants, dashboardData, dashboardError, dashboardLoading]);
 
   // ------------------------------------------------------------
   // State
@@ -452,24 +467,14 @@ export default function CustomerApprovalsPage({ params }: PageProps) {
             <span>KYC &amp; ONBOARDING ({currentLang.toUpperCase()})</span>
           </div>
 
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                Customer approvals
-              </h1>
-
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 sm:text-base">
-                Verify importer identity, licences and banking references
-                before trading privileges are granted.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-              <div className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-xs font-medium text-slate-600">
-                Assessment queue active
-              </span>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+              Customer approvals
+            </h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 sm:text-base">
+              Verify importer identity, licences and banking references
+              before trading privileges are granted.
+            </p>
           </div>
         </div>
 

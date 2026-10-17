@@ -211,23 +211,75 @@ const normalizeRegisterStatus = (item: ApiRecord): ServiceRecord["status"] => {
     return status;
   }
 
-  const hasFlag = (...keys: string[]) => readValue(item, ...keys) === true;
-  if (hasFlag("hasBlockedStage", "isBlocked")) return "Blocked";
-  if (hasFlag("hasCustomerAction", "requiresCustomerAction")) {
+  const stagesValue = readValue(item, "stages", "serviceStages");
+  const stages = Array.isArray(stagesValue)
+    ? stagesValue.filter(
+        (stage): stage is ApiRecord =>
+          !!stage && typeof stage === "object" && !Array.isArray(stage),
+      )
+    : [];
+  const hasStageState = (
+    statusNumber: number,
+    statusName: string,
+    flagName?: string,
+  ) =>
+    stages.some((stage) => {
+      const rawStageStatus = readValue(stage, "status", "stageStatus");
+      const normalizedStageStatus =
+        typeof rawStageStatus === "string"
+          ? rawStageStatus.trim().toLowerCase().replaceAll(/[\s_-]+/g, "")
+          : "";
+      return (
+        (flagName !== undefined && readValue(stage, flagName) === true) ||
+        Number(rawStageStatus) === statusNumber ||
+        normalizedStageStatus === statusName
+      );
+    });
+
+  if (
+    readValue(item, "hasBlockedStage", "isBlocked") === true ||
+    hasStageState(5, "blocked", "isBlocked")
+  ) {
+    return "Blocked";
+  }
+  if (
+    readValue(item, "hasCustomerAction", "requiresCustomerAction") === true ||
+    stages.some((stage) => readValue(stage, "requiresCustomerAction") === true)
+  ) {
     return "Requires customer action";
   }
-  if (hasFlag("hasNeedsReview", "needsReview")) return "Needs review";
-  if (hasFlag("hasPendingStage", "hasPending")) return "Pending";
+  if (
+    readValue(item, "hasNeedsReview", "needsReview") === true ||
+    hasStageState(6, "needsreview", "needsReview")
+  ) {
+    return "Needs review";
+  }
+  if (
+    readValue(item, "hasPendingStage", "hasPending") === true ||
+    hasStageState(2, "pending", "hasPending")
+  ) {
+    return "Pending";
+  }
   return status;
 };
 
-const formatDate = (value: unknown): string => {
+const formatUpdatedDate = (value: unknown): string => {
   const text = readText(value);
   if (!text) return "—";
   const date = new Date(text);
-  return Number.isNaN(date.getTime())
-    ? "—"
-    : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const elapsedMinutes = Math.floor((Date.now() - date.getTime()) / 60_000);
+  if (elapsedMinutes < 1) return "Just now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h ago`;
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays < 7) return `${elapsedDays}d ago`;
+
+  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 };
 
 const formatDateOnly = (value: unknown): string => {
@@ -335,12 +387,21 @@ const mapService = (item: ApiRecord): ServiceRecord | null => {
   const executorFirstName = readNestedText(executor, "firstName");
   const executorLastName = readNestedText(executor, "lastName");
   const executorName = [executorFirstName, executorLastName].filter(Boolean).join(" ");
+  const commodity = readText(readValue(item, "commodity", "goodsDescription", "cargoDescription"));
 
   return {
     id,
     ...(databaseId ? { shipmentId: databaseId } : {}),
     ...(referenceNumber ? { referenceNumber } : {}),
-    title: readText(readValue(item, "description", "title")) || "—",
+    title:
+      [
+        readValue(item, "description"),
+        readValue(item, "title"),
+        commodity,
+      ]
+        .map(readText)
+        .find(Boolean) || "—",
+    ...(commodity ? { commodity } : {}),
     importerName,
     importerCode:
       readText(readValue(item, "importerCode", "customerReference", "customerCode", "tinNumber", "tin")) ||
@@ -356,7 +417,7 @@ const mapService = (item: ApiRecord): ServiceRecord | null => {
     eta: formatDateOnly(eta),
     sla: sla.sla,
     ...(sla.isOverdue ? { isOverdue: true } : {}),
-    updated: formatDate(updatedAt),
+    updated: formatUpdatedDate(updatedAt),
     updatedAtTimestamp: toTimestamp(updatedAt),
   };
 };
@@ -405,7 +466,7 @@ export const useServiceStore = create<ServiceStore>((set, get) => ({
   fetchServices: async () => {
     set({ loading: true, error: null });
     try {
-      const response = await AssessorEndpoints.getActiveServicesForRegister();
+      const response = await AssessorEndpoints.getServicesUnderOversight();
       const services = normalizeRecordList(unwrapApiData(response))
         .map(mapService)
         .filter((service): service is ServiceRecord => service !== null);
@@ -464,7 +525,16 @@ export const useServiceStore = create<ServiceStore>((set, get) => ({
 
     return services.filter((item) =>
       (!query ||
-        [item.id, item.shipmentId ?? "", item.referenceNumber ?? "", item.title, item.importerName, item.importerCode]
+        [
+          item.id,
+          item.shipmentId ?? "",
+          item.referenceNumber ?? "",
+          item.title,
+          item.commodity ?? "",
+          item.importerName,
+          item.importerCode,
+          item.caseExecutor,
+        ]
           .some((value) => value.toLowerCase().includes(query))) &&
       (statusFilter === "ALL" || item.status === statusFilter) &&
       (modeFilter === "ALL" || item.mode === modeFilter) &&

@@ -82,7 +82,7 @@ function ServiceRow({
               </span>
             ) : (
               <Link
-                href={`/${lang}/admin/assessor/services/${encodeURIComponent(row.id)}`}
+                href={`/${lang}/admin/assessor/services/${encodeURIComponent(row.shipmentId ?? row.id)}`}
                 className="font-semibold text-sky-700 hover:underline"
               >
                 {row.id}
@@ -176,9 +176,11 @@ function ServiceRow({
 
 export function ServiceTable({
   managerView = false,
+  embedded = false,
   onPageChange,
 }: {
   managerView?: boolean;
+  embedded?: boolean;
   onPageChange?: (page: number) => void;
 } = {}) {
   const [updatedSort, setUpdatedSort] = useState<"asc" | "desc">("desc");
@@ -363,7 +365,9 @@ export function ServiceTable({
                   {error
                     ? "Services could not be loaded."
                     : services.length === 0
-                      ? "No service records are available in the database."
+                      ? managerView
+                        ? "No services are available."
+                        : "No services are assigned to you."
                       : "No services match your filters."}
                 </td>
               </tr>

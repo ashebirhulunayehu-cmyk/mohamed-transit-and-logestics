@@ -135,6 +135,14 @@ service.interceptors.response.use(
   (response: AxiosResponse<ApiResponse>) => {
     const data = response.data;
 
+    if (
+      response.status === 400 &&
+      response.config.url?.split("?")[0].toLowerCase().endsWith("/document/getservicedocuments") &&
+      JSON.stringify(data).toLowerCase().includes("no document data")
+    ) {
+      return [] as unknown as AxiosResponse<ApiResponse>;
+    }
+
     if (process.env.NODE_ENV === "development") {
       console.log(
         "⬅️ API Response:",
@@ -224,6 +232,8 @@ function redirectToLogin() {
     return;
   }
 
+  const callbackUrl = `${window.location.pathname}${window.location.search}`;
+
   try {
     deleteTokensClient();
     localStorage.removeItem("token");
@@ -236,7 +246,7 @@ function redirectToLogin() {
   // This redirect runs from a browser-only utility outside a React component,
   // so the framework rule is intentionally suppressed here.
   // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-  window.location.href = `/${currentLocale}/auth/login`;
+  window.location.href = `/${currentLocale}/auth/login?callbackUrl=${encodeURIComponent(callbackUrl)}`;
 }
 
 /* =========================================================

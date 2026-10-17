@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3000",
-    "dev:api": "node -e \"const fs=require('fs'); const path='backend/src/MohamedTransit.API/MohamedTransit.API.csproj'; if (!fs.existsSync(path)) { console.log('Backend project not found at ' + path + '. Skipping API startup.'); process.exit(0); } const { spawn } = require('child_process'); const child = spawn('dotnet', ['run', '--project', path, '--launch-profile', 'http'], { stdio: 'inherit', shell: true }); child.on('exit', (code) => process.exit(code ?? 0));\"",
+    "dev:api": "node -e \"const fs=require('fs'); const path=require('path'); const candidates=[process.env.MO_BACKEND_PROJECT, 'backend/src/MohamedTransit.API/MohamedTransit.API.csproj', '../Mo-Backend/backend/src/MohamedTransit.API/MohamedTransit.API.csproj'].filter(Boolean).map(project=>path.resolve(process.cwd(),project)); const project=candidates.find(fs.existsSync); if (!project) { console.error('Backend project not found. Set MO_BACKEND_PROJECT to the .csproj path.'); process.exit(1); } const { spawn }=require('child_process'); const child=spawn('dotnet',['run','--project',project,'--launch-profile','http'],{stdio:'inherit'}); child.on('error',error=>{console.error('Failed to start backend:',error.message);process.exit(1);}); child.on('exit',code=>process.exit(code ?? 0));\"",
     "dev:all": "concurrently -n API,WEB -c cyan,magenta \"npm:dev:api\" \"npm:dev\"",
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 3000",

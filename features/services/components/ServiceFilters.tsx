@@ -50,7 +50,13 @@ const cellColors: Record<string, { fill: string; text: string }> = {
   "Blue channel": { fill: "FFDBEAFE", text: "FF1E40AF" },
 };
 
-export function ServiceFilters({ managerView = false }: { managerView?: boolean }) {
+export function ServiceFilters({
+  managerView = false,
+  embedded = false,
+}: {
+  managerView?: boolean;
+  embedded?: boolean;
+}) {
   const [columnsOpen, setColumnsOpen] = useState(false);
   const {
     searchQuery,
@@ -154,7 +160,7 @@ export function ServiceFilters({ managerView = false }: { managerView?: boolean 
           <input
             type="text"
             aria-label="Search services"
-            placeholder="Search by service ID, reference..."
+            placeholder="Search by service ID, reference, commodity or importer"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={`w-full border border-slate-200 py-2 pl-9 pr-3 text-slate-800 placeholder:text-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-sky-500 ${managerView ? "min-h-10 rounded-md text-sm" : "rounded-lg text-xs"}`}

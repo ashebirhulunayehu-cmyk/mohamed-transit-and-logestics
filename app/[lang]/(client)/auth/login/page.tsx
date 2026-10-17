@@ -117,7 +117,12 @@ export default function LoginPage() {
       const destination = callbackUrl && callbackUrl.startsWith("/") ? callbackUrl : `/${lang}/customer`;
 
       if (extractedRole === "caseexecutor" || extractedRole === "caseexecuter") {
-        router.push(`/${lang}/admin/case-Executer`);
+        const executorBasePath = `/${lang}/admin/case-Executer`;
+        const executorDestination =
+          callbackUrl === executorBasePath || callbackUrl.startsWith(`${executorBasePath}/`)
+            ? callbackUrl
+            : executorBasePath;
+        router.push(executorDestination);
         return;
       }
 
@@ -127,10 +132,18 @@ export default function LoginPage() {
       }
 
       if (
-        extractedRole === "superadmin" ||
-        extractedRole === "admin" ||
         extractedRole === "assessor"
       ) {
+        const assessorBasePath = `/${lang}/admin/assessor`;
+        const assessorDestination =
+          callbackUrl === assessorBasePath || callbackUrl.startsWith(`${assessorBasePath}/`)
+            ? callbackUrl
+            : `/${lang}/admin/dashboard?role=assessor`;
+        router.push(assessorDestination);
+        return;
+      }
+
+      if (extractedRole === "superadmin" || extractedRole === "admin") {
         router.push(
           `/${lang}/admin/dashboard?role=${encodeURIComponent(extractedRole)}`
         );

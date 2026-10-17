@@ -42,6 +42,15 @@ export interface AddStageDiscussionRequest {
   comment: string;
 }
 
+export type ServiceStageDecisionAction = "Approve" | "ReturnToExecutor" | "Reject";
+
+export interface ServiceStageDecisionRequest {
+  serviceId: number;
+  stageId: number;
+  action: ServiceStageDecisionAction;
+  notes: string | null;
+}
+
 export interface AssessorServiceStage {
   id: number;
   name: string;

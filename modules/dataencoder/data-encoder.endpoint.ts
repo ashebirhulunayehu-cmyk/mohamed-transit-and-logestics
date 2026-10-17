@@ -86,7 +86,7 @@ export const DataEncoderEndpoints = {
     }),
 
   // GET /api/v1/Account/GetProfile via the authenticated same-origin proxy.
-  getProfile: () => fetch("/api/encoder/profile", { cache: "no-store" }),
+  getProfile: () => fetch("/api/account/profile", { cache: "no-store" }),
 
   // PUT /api/v1/Account/UpdateProfile via the authenticated same-origin proxy.
   updateProfile: (profile: {

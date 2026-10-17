@@ -2,7 +2,11 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { normalizeApiBaseUrl } from "@/modules/utils/axios/config";
 
-const readAccessToken = async (): Promise<string | null> => {
+const readAccessToken = async (request: Request): Promise<string | null> => {
+	const authorization = request.headers.get("authorization");
+	const bearerToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+	if (bearerToken) return bearerToken;
+
 	const cookieStore = await cookies();
 	return (
 		cookieStore.get("accessToken")?.value ??
@@ -17,7 +21,7 @@ export const proxyDataEncoderRequest = async (
 	method: "GET" | "POST" | "PUT",
 	endpoint: string,
 ): Promise<Response> => {
-	const accessToken = await readAccessToken();
+	const accessToken = await readAccessToken(request);
 	if (!accessToken) {
 		return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 	}

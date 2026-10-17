@@ -40,6 +40,7 @@ export interface IUser {
   phoneNumber?: string;
   profilePhoto?: string;
   profilePictureUrl?: string;
+  branch?: string;
   password?: string;
   refreshToken?: string;
   refreshTokenExpireDate?: string;
@@ -147,6 +148,7 @@ export type AuthState = { loading: boolean; user: IUser | null; error: string | 
 export type AuthStore = AuthState & {
   login: (payload: ILogin) => Promise<IUser>;
   logout: () => Promise<void>;
+  refreshAccountProfile: () => Promise<IUser>;
   updateProfile: (payload: UpdateUserRequest) => Promise<IUser>;
   syncProfile: (payload: Partial<IUser>, options?: { persist?: boolean }) => void;
   signUp: (payload: FormData | IUser) => Promise<void>;
